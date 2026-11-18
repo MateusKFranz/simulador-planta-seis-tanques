@@ -25,12 +25,12 @@ Calibração nominal inicial dos YF-S401: `2580 pulsos/L`, derivada de `f = 43 Q
 - Servo 2: D37
 - Servo 3: D38
 - Servo 4: D39
-- Bomba 1 RPWM: D5
-- Bomba 1 LPWM: D6
+- Bomba 1 RPWM: D9
+- Bomba 1 LPWM: D10
 - Bomba 2 RPWM: D7
 - Bomba 2 LPWM: D8
-- Bomba 3 RPWM: D9
-- Bomba 3 LPWM: D10
+- Bomba 3 RPWM: D5
+- Bomba 3 LPWM: D6
 - Relé 1: D26
 - Relé 2: D27
 - Relé 3: D28

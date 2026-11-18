@@ -1,2 +1,6 @@
 pyserial>=3.5,<4
 websockets>=13,<16
+
+# MODELICA: PyFMI deve ser instalado pelo conda-forge (ver README).
+# OMPython é necessário apenas para gerar FMUs com OpenModelica.
+# Não é necessário para MOCK/HARDWARE nem para executar FMUs já geradas.

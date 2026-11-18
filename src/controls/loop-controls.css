@@ -1,0 +1,25 @@
+.loop-list { display: grid; gap: 6px; }
+.loop-list button { text-align: left; padding: 9px; }
+.loop-faceplate {
+    position: fixed; z-index: 120; top: 100px; right: 360px;
+    width: 330px; min-width: 260px; max-width: calc(100vw - 20px);
+    max-height: calc(100vh - 120px); resize: both; overflow: auto;
+    background: #eceff0; color: #242a2e; border: 1px solid #87949d;
+    border-radius: 7px; box-shadow: 0 6px 22px #0004; font-size: 13px;
+}
+.loop-faceplate[hidden] { display: none; }
+.loop-faceplate header { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 10px; border-bottom: 1px solid #b6bcc0; cursor: move; touch-action: none; }
+.loop-faceplate header small { display: block; margin-top: 4px; }
+.loop-faceplate header button { font-size: 20px; padding: 2px 9px; }
+.loop-body { padding: 12px; }
+.loop-readings { font-weight: bold; line-height: 1.7; }
+.loop-status { font-size: 12px; line-height: 1.5; color: #566168; }
+.loop-operation, .loop-tuning { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 12px 0; }
+.loop-faceplate label { display: grid; gap: 5px; }
+.loop-faceplate input, .loop-faceplate select { box-sizing: border-box; min-width: 0; width: 100%;
+    padding: 7px; border: 1px solid #87949d; border-radius: 4px; background: #f4f5f5; color: #242a2e; }
+.loop-faceplate :disabled { opacity: 0.55; cursor: not-allowed; }
+.loop-faceplate summary { cursor: pointer; }
+.loop-body > small { display: block; color: #566168; line-height: 1.5; }
+@media (max-width: 900px) { .loop-faceplate { right: 12px; } }

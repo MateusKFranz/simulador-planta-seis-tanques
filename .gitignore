@@ -1,18 +1,51 @@
+# JavaScript / Vite
 node_modules/
 dist/
 .vite/
 
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+.venv/
+venv/
+*.egg-info/
 
+# Dados locais e configuracoes privadas
 .env
 .env.*
 !.env.example
+data/level-zero.json
 
+# Modelica / PyFMI: arquivos gerados
+modelica/build/
+*.fmu
+*_result.mat
+*_result.txt
+
+# Relatorios e artefatos de testes
+.coverage
+.coverage.*
+htmlcov/
+coverage/
+test-results/
+playwright-report/
+
+# Logs e arquivos temporarios
 *.log
+*.tmp
+*.bak
+*.swp
+*.swo
+*~
 
+# Editores / sistema operacional
 .vscode/
 .idea/
-
 .DS_Store
 Thumbs.db
+Desktop.ini

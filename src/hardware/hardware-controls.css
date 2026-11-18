@@ -1,0 +1,7 @@
+.hardware-manual p { font-size: 0.85em; line-height: 1.4; margin: 0.6em 0; }
+.hardware-manual h4 { margin: 1em 0 0.4em; }
+.hw-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.hardware-manual button { padding: 7px; cursor: pointer; }
+.hardware-manual button:disabled { cursor: default; opacity: 0.5; }
+.hardware-manual .hw-stop { background: #a82e29; color: white; font-weight: bold; }
+.hw-error { color: #9e2929; overflow-wrap: anywhere; }

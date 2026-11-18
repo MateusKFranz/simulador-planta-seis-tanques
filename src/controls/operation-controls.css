@@ -1,0 +1,22 @@
+.operation-controls details { border-top: 1px solid #adb4b8; padding: 8px 0; }
+.operation-controls summary { cursor: pointer; font-weight: 600; }
+.operation-controls label { display: grid; gap: 6px; margin: 8px 0; }
+.operation-controls input, .operation-controls select { width: 100%; box-sizing: border-box; }
+.operation-controls p, .operation-controls small { font-size: .85em; overflow-wrap: anywhere; }
+.operation-controls .op-buttons { display: flex; flex-wrap: wrap; gap: 6px; }
+.operation-controls .reason, .operation-controls .op-blocks { color: #824315; }
+
+.operation-controls .op-buttons .is-active {
+    background: #d9e7ee; border: 2px solid #46748c; color: #183b4d; font-weight: 700;
+}
+.operation-controls .op-buttons .is-active::before { content: '✓ '; }
+
+.actuator-card { min-width: 0; padding-bottom: 10px; }
+.actuator-card .sidebar-desired { display: block; font-size: .85em; margin: 4px 0; }
+.actuator-card .op-buttons { display: flex; flex-wrap: wrap; gap: 5px; }
+.actuator-card .oy-choices { margin: 6px 0; }
+input.actuator-slider { display: block; width: 100%; min-width: 0; box-sizing: border-box; padding: 0; margin: 10px 0; }
+.actuator-card :disabled, .actuator-slider:disabled { opacity: .55; cursor: not-allowed; }
+
+.actuator-faceplate header { cursor: move; touch-action: none; }
+.mode-block:empty { display: none; }

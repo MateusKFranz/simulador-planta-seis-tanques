@@ -1,0 +1,63 @@
+.plant-stage {
+    position: relative;
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    overflow: hidden;
+    --sensor-drawer-width: min(300px, 45%);
+}
+.plant-stage.sensor-drawer-open { padding-left: var(--sensor-drawer-width); }
+.plant-stage .sensor-drawer { width: var(--sensor-drawer-width); }
+.sensor-drawer {
+    position: absolute;
+    z-index: 40;
+    inset: 8px auto 8px 0;
+    width: min(300px, calc(100% - 16px));
+    box-sizing: border-box;
+    padding: 14px;
+    overflow-y: auto;
+    background: #eef0f1;
+    color: #242a2e;
+    border: 1px solid #8b949b;
+    border-radius: 0 8px 8px 0;
+    box-shadow: 3px 2px 12px #0003;
+    transform: translateX(calc(-100% - 12px));
+    visibility: hidden;
+    transition: transform 180ms ease, visibility 180ms;
+    font-size: 14px;
+}
+.sensor-drawer.is-open { transform: translateX(0); visibility: visible; }
+.sensor-drawer-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.sensor-drawer-close { padding: 4px 10px; font-size: 22px; cursor: pointer; }
+.sensor-drawer-title { margin-right: auto; }
+.sensor-drawer-header { gap: 5px; }
+.sensor-drawer-popout { order: 1; font-size: 21px; cursor: pointer; padding: 4px 9px; }
+.sensor-drawer-close { order: 2; }
+.sensor-drawer-notice { display: block; color: #824315; margin-top: 8px; }
+.sensor-drawer-list { display: grid; gap: 6px; }
+.sensor-drawer-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 12px 10px;
+    background: #f8f9fa;
+    color: inherit;
+    border: 1px solid #b6bcc0;
+    border-radius: 5px;
+    font: inherit;
+    cursor: pointer;
+}
+.sensor-drawer-row[aria-pressed="true"] { background: #d9e7ee; border-color: #46748c; box-shadow: inset 3px 0 #46748c; }
+.sensor-drawer-row:focus-visible, .sensor-drawer-close:focus-visible { outline: 2px solid #46748c; outline-offset: 2px; }
+.sensor-drawer-value { font-variant-numeric: tabular-nums; }
+.sensor-drawer-detail { white-space: pre-line; line-height: 1.65; margin-top: 18px; font-size: 13px; }
+.sensor-drawer-primary { font-size: 19px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.sensor-drawer-diagnostics { margin-top: 10px; font-size: 12px; color: #4d5961; }
+.sensor-drawer-metadata { border-top: 1px solid #c7cdd1; margin-top: 10px; padding-top: 8px; font-size: 12px; }
+.level-zero-controls { margin-top: 12px; font-size: 12px; }
+.level-zero-controls button { margin: 3px; padding: 6px; cursor: pointer; }
+.level-zero-controls [role="dialog"] { border: 1px solid #87949d; border-radius: 4px; padding: 8px; }
+.level-zero-restore { font-size: 11px; }
+@media (prefers-reduced-motion: reduce) { .sensor-drawer { transition: none; } }
