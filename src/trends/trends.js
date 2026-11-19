@@ -5,21 +5,33 @@ import { bindTimeline, durationLimit, timeRange } from './trends-interaction.js'
 
 import { componentLabel } from '../shared/component-labels.js';
 import { tankLevelSensorId } from '../state/plant-state.js';
+import { CATEGORY_COLORS, NEUTRAL_COLORS, STATUS_COLORS, seriesColor } from '../shared/hmi-palette.js';
 
 // PALETA
-const AZUL = '#2a78d6';
-const VERDE = '#138a5e';
-const ROSA = '#d55181';
-const CORES_MALHA = [AZUL, VERDE, ROSA];
+const estilo = {
+    tinta: NEUTRAL_COLORS.text, suave: NEUTRAL_COLORS.frame,
+    regra: NEUTRAL_COLORS.grid, regraPrincipal: NEUTRAL_COLORS.majorGrid,
+    molduraPlot: NEUTRAL_COLORS.frame, papel: NEUTRAL_COLORS.panel,
+    man: CATEGORY_COLORS.niveis.accent
+};
 const TRACEJADO = [6, 4];
 const PONTILHADO = [2, 3];       // setpoint
+const TRACOS_MV = { AUTO: TRACEJADO, MAN: [], indisponivel: [1, 4] };
+const tracoMV = modo => modo === 'AUTO' || modo === 'MAN' ? TRACOS_MV[modo] : TRACOS_MV.indisponivel;
+// Separa as duas cores mais claras dos fundos coloridos sem recolorir as curvas.
+const PENAS_COM_HALO = new Set([seriesColor('LI2'), seriesColor('LI3')]);
 
 const MAX_AMOSTRAS = 36000;      // 1 h de simulação a 10 Hz
 const MAX_REGISTRO = 400000;
 const JANELAS = [15, 30, 60, 120, 300, 600, 1800];
 const MARGEM = { esq: 50, dir: 48, topo: 22, base: 6 };   // à direita: ponteiros de SP
 const ALTURA_EIXO_T = 20;
-const ALTURA_FAIXA = 12;
+function limitesPlot(largura, altura, ultimo) {
+    return {
+        x0: MARGEM.esq, x1: largura - MARGEM.dir, y0: MARGEM.topo,
+        y1: altura - MARGEM.base - (ultimo ? ALTURA_EIXO_T : 0)
+    };
+}
 
 // PENAS FIXAS
 
@@ -40,26 +52,32 @@ function pena(key, rotulo, cor, opcoes = {}) {
 }
 
 const PENAS_NIVEL = [
-    pena('LI1', 'LI1', AZUL, { descricao: 'TQ1' }),
-    pena('LI2', 'LI2', AZUL, { descricao: 'TQ2', direita: true }),
-    pena('LI3', 'LI3', VERDE, { descricao: 'TQ3' }),
-    pena('LI4', 'LI4', VERDE, { descricao: 'TQ4', direita: true }),
-    pena('LI5', 'LI5', ROSA, { descricao: 'TQ5' }),
-    pena('LI6', 'LI6', ROSA, { descricao: 'TQ6', direita: true })
+    pena('LI1', 'LI1', seriesColor('LI1'), { descricao: 'TQ1' }),
+    pena('LI2', 'LI2', seriesColor('LI2'), { descricao: 'TQ2', direita: true }),
+    pena('LI3', 'LI3', seriesColor('LI3'), { descricao: 'TQ3' }),
+    pena('LI4', 'LI4', seriesColor('LI4'), { descricao: 'TQ4', direita: true }),
+    pena('LI5', 'LI5', seriesColor('LI5'), { descricao: 'TQ5' }),
+    pena('LI6', 'LI6', seriesColor('LI6'), { descricao: 'TQ6', direita: true })
 ];
 
 const PENAS_VAZAO = [
-    pena('FI3', 'FI3', AZUL, { descricao: 'LV3 → TQ1', digitos: 2 }),
-    pena('FI4', 'FI4', AZUL, { descricao: 'LV4 → TQ2', digitos: 2, direita: true }),
-    pena('FI1', 'FI1', VERDE, { descricao: 'antes de LV1', digitos: 2 }),
-    pena('FI2', 'FI2', VERDE, { descricao: 'antes de LV2', digitos: 2, direita: true }),
-    pena('FI5', 'FI5', ROSA, { descricao: 'OY2_A → TQ5', digitos: 2 }),
-    pena('FI6', 'FI6', ROSA, { descricao: 'OY1_B → TQ6', digitos: 2, direita: true })
+    pena('FI3', 'FI3', seriesColor('FI3'), { descricao: 'LV3 → TQ1', digitos: 2 }),
+    pena('FI4', 'FI4', seriesColor('FI4'), { descricao: 'LV4 → TQ2', digitos: 2, direita: true }),
+    pena('FI1', 'FI1', seriesColor('FI1'), { descricao: 'antes de LV1', digitos: 2 }),
+    pena('FI2', 'FI2', seriesColor('FI2'), { descricao: 'antes de LV2', digitos: 2, direita: true }),
+    pena('FI5', 'FI5', seriesColor('FI5'), { descricao: 'OY2_A → TQ5', digitos: 2 }),
+    pena('FI6', 'FI6', seriesColor('FI6'), { descricao: 'OY1_B → TQ6', digitos: 2, direita: true })
 ];
 
-// Só para o CSV (bombas e válvulas de controle)
-const PENAS_BOMBA = ['JIC3', 'JIC4', 'JIC1'].map(id => pena(id, componentLabel(id), AZUL));
-const PENAS_VALVULA = ['LV1', 'LV2', 'LV3', 'LV4'].map(id => pena(id, componentLabel(id), AZUL));
+const PENAS_BOMBA = ['JIC3', 'JIC4', 'JIC1'].map(id => pena(id, componentLabel(id), seriesColor(id)));
+const PENAS_VALVULA = ['LV1', 'LV2', 'LV3', 'LV4'].map(id => pena(id, componentLabel(id), seriesColor(id)));
+const PENAS_ATUADORES = [...PENAS_BOMBA, ...PENAS_VALVULA].map(p =>
+    pena(`atuador.${p.key}`, p.rotulo, p.cor, {
+        descricao: p.key.startsWith('JIC') ? 'Comando da bomba' : 'Abertura comandada',
+        direita: p.key.startsWith('LV'), degrau: true
+    }));
+const CATEGORIAS = { niveis: 'Níveis', vazoes: 'Vazões', malhas: 'Malhas', atuadores: 'Atuadores' };
+const ALTURAS_INICIAIS = { niveis: 170, vazoes: 170, controladas: 170, manipuladas: 190, atuadores: 170 };
 
 // AUXILIARES
 
@@ -77,6 +95,10 @@ function h(tag, attrs = {}, children = []) {
         if (child !== null && child !== undefined) node.append(child instanceof Node ? child : String(child));
     }
     return node;
+}
+
+function aplicarCategoria(element, id) {
+    element.style.setProperty('--tv-category-accent', CATEGORY_COLORS[id].accent);
 }
 
 function finito(value) {
@@ -143,7 +165,9 @@ function svgTraco(cor, dash, alfa = 1, largura = 2.4) {
 
 // TELA
 
-export function createTrends(host, { getRuntime = () => ({}) } = {}) {
+export function createTrends(host, {
+    getRuntime = () => ({}), onSelectionChange = () => {}, onPlotResize = () => {}
+} = {}) {
     let visivel = false;
     let janela = durationLimit(Number(ler('trends-janela')) || 300);
     let aoVivo = true;
@@ -157,14 +181,25 @@ export function createTrends(host, { getRuntime = () => ({}) } = {}) {
     let ultimaBase = null;          // 'sim' | 'relogio'
     let ultimoCenario = null;
     let assinatura = '';
-    let janelasGraficos = [];       // descrição das três janelas
+    let janelasGraficos = [];
+    let janelasVisiveis = [];
     let plots = [];                 // {canvas, caixa, janela, sub, ultimo}
+    const rowHeights = { ...ALTURAS_INICIAIS };
+    const manualRowHeights = {};
+    const rowViews = new Map();
+    let rowBaselines = {};
+    const ultimaLeitura = new Map();
     const ocultas = new Set();
-    let estilo = null;
     let cenarioNome = '';
 
     // ESTRUTURA
     const raiz = h('section', { class: 'trends-view', 'aria-label': 'Tendências' });
+    for (const [token, color] of Object.entries({
+        '--paper': estilo.papel, '--ink': estilo.tinta, '--muted': estilo.suave,
+        '--panel': NEUTRAL_COLORS.panel, '--tv-background': NEUTRAL_COLORS.background,
+        '--tv-frame': estilo.molduraPlot, '--sig': CATEGORY_COLORS.niveis.accent,
+        '--man': estilo.man, '--ok': STATUS_COLORS.normal, '--unknown': STATUS_COLORS.unknown
+    })) raiz.style.setProperty(token, color);
     raiz.hidden = true;
 
     const titulo = h('div', { class: 'tv-title' }, [h('h2', { text: 'Tendências' }), h('p', { class: 'tv-subtitle' })]);
@@ -179,17 +214,31 @@ export function createTrends(host, { getRuntime = () => ({}) } = {}) {
     const contagem = h('span', { class: 'tv-count' });
     const botaoCsv = h('button', { type: 'button', class: 'tv-csv', disabled: true }, ['Exportar CSV']);
     const botaoLimpar = h('button', { type: 'button', title: 'Apaga o histórico dos gráficos (não apaga o registro)' }, ['Limpar gráficos']);
+    const seletores = new Map();
+    const categorias = h('div', { class: 'tv-categories', role: 'group', 'aria-label': 'Categorias de gráficos' });
+    for (const [id, nome] of Object.entries(CATEGORIAS)) {
+        const input = h('input', { type: 'checkbox', checked: true, disabled: true, 'aria-label': nome });
+        const estado = h('small', { text: 'Sem dados' });
+        const label = h('label', {}, [input, h('span', { class: 'tv-category-name', text: nome }), estado]);
+        aplicarCategoria(label, id);
+        categorias.append(label);
+        seletores.set(id, { input, estado });
+        input.addEventListener('change', () => { atualizarComposicao(true); desenhar(); });
+    }
 
     const barra = h('div', { class: 'tv-bar' }, [
         titulo,
         h('div', { class: 'tv-spacer' }),
         h('div', { class: 'tv-group' }, [h('label', { text: 'Janela' }), seletorJanela, botaoAoVivo]),
         h('div', { class: 'tv-group' }, [nomeEnsaio, botaoGravar, contagem, botaoCsv]),
-        h('div', { class: 'tv-group' }, [botaoLimpar])
+        h('div', { class: 'tv-group' }, [botaoLimpar]),
+        categorias
     ]);
-    const linhas = h('div', { class: 'tv-rows' });
-    const vazio = h('div', { class: 'tv-empty', text: 'Aguardando dados do backend…' });
-    raiz.append(barra, linhas, vazio);
+    const linhas = h('div', { class: 'tv-rows-grid' });
+    const viewport = h('div', { class: 'tv-rows', hidden: true }, [linhas]);
+    const semGraficos = h('p', { class: 'tv-selection-empty', text: 'Nenhuma categoria com dados disponíveis.' });
+    const vazio = h('div', { class: 'tv-empty', hidden: true, text: 'Aguardando mais amostras…' });
+    raiz.append(barra, viewport, semGraficos, vazio);
     host.append(raiz);
 
     // CONTROLES
@@ -203,8 +252,10 @@ export function createTrends(host, { getRuntime = () => ({}) } = {}) {
     botaoCsv.addEventListener('click', exportarCsv);
     botaoLimpar.addEventListener('click', () => {
         amostras = [];
+        ultimaLeitura.clear();
         aoVivo = true;
         fimVista = null;
+        atualizarComposicao();
         desenhar();
     });
 
@@ -217,16 +268,6 @@ export function createTrends(host, { getRuntime = () => ({}) } = {}) {
     }
 
     // DESCRIÇÃO DAS JANELAS
-    function estiloMalhas(malhas) {
-        const tags = Object.keys(malhas);
-        const estilos = {};
-        tags.forEach((tag, i) => {
-            if (tags.length <= 3) estilos[tag] = { cor: CORES_MALHA[i], dash: [] };
-            else estilos[tag] = { cor: CORES_MALHA[Math.floor(i / 2) % 3], dash: i % 2 ? TRACEJADO : [] };
-        });
-        return estilos;
-    }
-
     function pvNome(malha) {
         const pv = malha.pvSource ?? {};
         if (pv.tipo === 'vazao_soma') return (pv.ids ?? []).map(componentLabel).join(' + ');
@@ -236,18 +277,17 @@ export function createTrends(host, { getRuntime = () => ({}) } = {}) {
 
     function montarJanelas(runtime) {
         const malhas = runtime.loops ?? {};
-        const estilos = estiloMalhas(malhas);
-        const hMax = runtime.sim?.tankHeightCm ?? 25;
+        const hMax = runtime.backendMode === 'HARDWARE' ? 30 : runtime.sim?.tankHeightCm ?? 25;
         const lista = [];
 
-        // SP dos tanques com malha de nível, pontilhado na cor do tanque
+        // SP pontilhado na cor da malha.
         const spNivel = [];
         for (const [tag, malha] of Object.entries(malhas)) {
             if (malha.pvSource?.tipo !== 'nivel') continue;
             const lt = tankLevelSensorId(malha.pvSource.id);
             const base = PENAS_NIVEL.find(x => x.key === lt);
             if (!base) continue;
-            const sp = pena(`${tag}.sp`, `SP ${tag}`, base.cor, { degrau: true, largura: 1.6, digitos: 1, malha: tag });
+            const sp = pena(`${tag}.sp`, `SP ${tag}`, seriesColor(tag), { degrau: true, largura: 1.6, digitos: 1, malha: tag });
             sp.dash = PONTILHADO;
             sp.sp = true;
             sp.de = lt;
@@ -255,9 +295,14 @@ export function createTrends(host, { getRuntime = () => ({}) } = {}) {
         }
         lista.push({
             id: 'niveis',
+            categoria: 'niveis',
             titulo: 'Nível dos tanques',
             subtitulo: spNivel.length ? 'pontilhado: setpoint' : null,
             subs: [{ unidade: 'cm', faixa: { min: 0, max: hMax }, penas: [...PENAS_NIVEL, ...spNivel] }]
+        });
+        lista.push({
+            id: 'vazoes', categoria: 'vazoes', titulo: 'Vazões medidas',
+            subs: [{ unidade: 'L/min', faixa: { auto: true, min: 0, max: 12, spanMin: 1, deZero: true }, penas: PENAS_VAZAO }]
         });
 
         const tags = Object.keys(malhas);
@@ -267,9 +312,8 @@ export function createTrends(host, { getRuntime = () => ({}) } = {}) {
                 const malha = malhas[tag];
                 const unidade = malha.unit ?? '';
                 const digitos = unidade === 'cm' ? 1 : 2;
-                const { cor, dash } = estilos[tag];
+                const cor = seriesColor(tag);
                 const pv = pena(`${tag}.pv`, tag, cor, { descricao: pvNome(malha), digitos, malha: tag });
-                pv.dash = dash;
                 const sp = pena(`${tag}.sp`, `${tag} SP`, cor, { degrau: true, largura: 1.6, digitos, malha: tag, rotuloPonta: 'SP' });
                 sp.dash = PONTILHADO;
                 sp.sp = true;
@@ -281,88 +325,194 @@ export function createTrends(host, { getRuntime = () => ({}) } = {}) {
                     ? { auto: true, min: 0, max: hMax, spanMin: 3 }
                     : { auto: true, min: 0, max: malha.spMax ?? 100, spanMin: 0.5, deZero: true };
             }
-            lista.push({ id: 'controladas', titulo: 'Variáveis controladas', subtitulo: 'PV linha · SP pontilhado', subs: [...porUnidade.values()], malhas: tags });
+            lista.push({ id: 'controladas', categoria: 'malhas', titulo: 'Variáveis controladas', subtitulo: 'PV linha · SP pontilhado', subs: [...porUnidade.values()], malhas: tags });
             lista.push({
                 id: 'manipuladas',
+                categoria: 'malhas',
                 titulo: 'Variáveis manipuladas',
                 subtitulo: 'saída dos controladores',
                 malhas: tags,
                 subs: [{
                     unidade: '%',
                     faixa: { min: 0, max: 100 },
-                    faixasModo: tags,
                     penas: tags.map(tag => {
                         const malha = malhas[tag];
-                        const p = pena(`${tag}.mv`, componentLabel(malha.mvTarget?.id), estilos[tag].cor, { descricao: tag, digitos: 0, malha: tag });
-                        p.dash = estilos[tag].dash;
-                        return p;
+                        return pena(`${tag}.mv`, componentLabel(malha.mvTarget?.id), seriesColor(tag), { descricao: tag, digitos: 0, malha: tag });
                     })
                 }]
             });
-        } else {
-            lista.push({ id: 'controladas', titulo: 'Vazões medidas', subtitulo: 'sem malhas de controle neste modo', subs: [{ unidade: 'L/min', faixa: { auto: true, min: 0, max: 12, spanMin: 1, deZero: true }, penas: PENAS_VAZAO }] });
-            lista.push({
-                id: 'manipuladas',
-                titulo: 'Variáveis manipuladas',
-                vazio: runtime.backendMode === 'HARDWARE'
-                    ? 'Planta real em somente leitura: o estado dos atuadores não é medido.'
-                    : 'Sem malhas de controle no cenário.',
-                subs: []
-            });
         }
+        lista.push({
+            id: 'atuadores', categoria: 'atuadores', titulo: 'Bombas e válvulas atuadas',
+            subtitulo: runtime.backendMode === 'HARDWARE' ? 'comandos confirmados pelo firmware' : null,
+            subs: [{ unidade: '%', faixa: { min: 0, max: 100 }, penas: PENAS_ATUADORES }]
+        });
         return lista;
+    }
+
+    function atualizarComposicao(selecaoManual = false) {
+        const inicio = amostras[0]?.t ?? Infinity;
+        const disponiveis = janelasGraficos.filter(jan => jan.subs.some(sub =>
+            sub.penas.some(p => (jan.id !== 'niveis' || !p.sp) && (ultimaLeitura.get(p.key) ?? -Infinity) >= inicio)));
+        for (const [id, { input, estado }] of seletores) {
+            input.disabled = !disponiveis.some(jan => jan.categoria === id);
+            estado.hidden = !input.disabled;
+        }
+        const visiveis = disponiveis.filter(jan => seletores.get(jan.categoria).input.checked);
+        const mudou = visiveis.length !== janelasVisiveis.length || visiveis.some((jan, i) => jan !== janelasVisiveis[i]);
+        if (mudou && selecaoManual) onSelectionChange();
+        semGraficos.hidden = visiveis.length > 0;
+        const mensagem = disponiveis.length
+            ? 'Selecione uma categoria para exibir seus gráficos.'
+            : 'Nenhuma categoria com dados disponíveis.';
+        if (semGraficos.textContent !== mensagem) semGraficos.textContent = mensagem;
+        viewport.hidden = visiveis.length === 0;
+        if (!mudou) return;
+        if (visiveis.map(jan => jan.id).join() !== janelasVisiveis.map(jan => jan.id).join()) rowBaselines = {};
+        janelasVisiveis = visiveis;
+        montarLinhas();
+    }
+
+    function rowMinimum(id, { row, legenda }) {
+        const minimoPlot = id === 'manipuladas' ? 150 : 135;
+        const contorno = row.offsetHeight - row.clientHeight;
+        return Math.max(minimoPlot, Math.ceil(legenda.getBoundingClientRect().height) + contorno);
+    }
+
+    function applyRowHeights() {
+        let altura = 0;
+        const tracks = janelasVisiveis.map(jan => {
+            const { id } = jan;
+            const minimo = Math.max(rowMinimum(id, rowViews.get(jan)), rowBaselines[id] ?? manualRowHeights[id] ?? 0);
+            const desejada = Math.max(minimo, rowBaselines[id] ?? rowHeights[id]);
+            altura += desejada;
+            return `minmax(${minimo}px, ${desejada}fr)`;
+        });
+        viewport.style.setProperty('--tv-plot-height', `${altura}px`);
+        linhas.style.gridTemplateRows = tracks.join(' ');
+    }
+
+    // A legenda mede sua altura natural, independentemente do tamanho da linha.
+    const legendObserver = new ResizeObserver(() => {
+        applyRowHeights();
+        agendarDesenho();
+    });
+
+    function createPlotGrip({ id, titulo }, row, legenda) {
+        const grip = h('div', { class: 'tv-plot-grip', role: 'separator', tabindex: '0',
+            'aria-orientation': 'horizontal', 'aria-label': `Ajustar altura: ${titulo}`,
+            title: 'Arraste para ajustar a altura; duplo clique para restaurar' });
+        let drag = null;
+        const renderedHeight = () => Math.round(row.getBoundingClientRect().height);
+        function setHeight(value, previous, reset = false) {
+            const height = Math.max(rowMinimum(id, { row, legenda }), Math.round(value));
+            const delta = height - previous;
+            if (!delta && !reset) return previous;
+            // Mantém as outras linhas na altura visível ao iniciar o ajuste.
+            if (!drag || !drag.applied) {
+                rowBaselines = Object.fromEntries(janelasVisiveis.filter(jan => jan.id !== id).map(jan =>
+                    [jan.id, Math.round(rowViews.get(jan).row.getBoundingClientRect().height)]));
+                if (drag) drag.applied = true;
+            }
+            rowHeights[id] = height;
+            if (reset) delete manualRowHeights[id];
+            else manualRowHeights[id] = height;
+            applyRowHeights();
+            if (delta) onPlotResize(delta);
+            agendarDesenho();
+            return height;
+        }
+        grip.addEventListener('pointerdown', event => {
+            if (event.button !== 0 || drag) return;
+            event.preventDefault();
+            const height = Math.round(renderedHeight());
+            drag = { id: event.pointerId, y: event.clientY, height, previous: height };
+            grip.setPointerCapture(event.pointerId);
+            grip.classList.add('resizing');
+        });
+        grip.addEventListener('pointermove', event => {
+            if (drag?.id === event.pointerId) {
+                drag.previous = setHeight(drag.height + event.clientY - drag.y, drag.previous);
+            }
+        });
+        function stop(event) {
+            if (drag?.id !== event.pointerId) return;
+            drag = null;
+            grip.classList.remove('resizing');
+            if (grip.hasPointerCapture(event.pointerId)) grip.releasePointerCapture(event.pointerId);
+        }
+        for (const name of ['pointerup', 'pointercancel', 'lostpointercapture']) grip.addEventListener(name, stop);
+        grip.addEventListener('keydown', event => {
+            if (!['ArrowUp', 'ArrowDown'].includes(event.key)) return;
+            event.preventDefault();
+            const height = Math.round(renderedHeight());
+            setHeight(height + (event.key === 'ArrowDown' ? 20 : -20), height);
+        });
+        grip.addEventListener('dblclick', () => setHeight(ALTURAS_INICIAIS[id], renderedHeight(), true));
+        return grip;
     }
 
     // MONTAGEM DO DOM DAS JANELAS
     function montarLinhas() {
-        linhas.innerHTML = '';
-        plots = [];
-        janelasGraficos.forEach((jan, indiceJanela) => {
-            const ultimaJanela = indiceJanela === janelasGraficos.length - 1;
-            const area = h('div', { class: 'tv-plot' });
-            const legenda = h('div', { class: 'tv-legend' });
-            linhas.append(h('div', { class: `tv-row tv-row-${jan.id}` }, [area, legenda]));
-
-            if (jan.vazio) {
-                area.append(h('div', { class: 'tv-plot-empty' }, [h('strong', { text: jan.titulo }), h('span', { text: jan.vazio })]));
-            }
-            jan.subs.forEach((sub, i) => {
-                const canvas = h('canvas', { class: 'tv-canvas' });
-                const caixa = h('div', { class: 'tv-sub' }, [canvas]);
-                area.append(caixa);
-                plots.push({ canvas, caixa, janela: jan, sub, primeiroSub: i === 0, ultimo: ultimaJanela });
-                ligarPonteiro(canvas, caixa, sub, ultimaJanela);
-            });
-
-            // Legenda
-            legenda.append(h('div', { class: 'tv-legend-head' }, [
-                h('strong', { text: jan.titulo }),
-                jan.subtitulo ? h('span', { text: jan.subtitulo }) : null
-            ]));
-            if (jan.id === 'controladas' && jan.malhas) {
-                legenda.append(h('div', { class: 'tv-legend-row tv-legend-cols' }, [h('span'), h('span'), h('span'), h('span', { text: 'PV' }), h('span', { text: 'SP' })]));
-                for (const sub of jan.subs) {
-                    for (let k = 0; k < sub.penas.length; k += 2) {
-                        const pv = sub.penas[k];
-                        const sp = sub.penas[k + 1];
-                        legenda.append(linhaLegendaMalha(pv, [pv, sp], sub.unidade, [pv.key, sp.key]));
-                    }
-                }
-            } else if (jan.id === 'manipuladas' && jan.malhas) {
-                legenda.append(h('div', { class: 'tv-legend-row tv-legend-cols' }, [h('span'), h('span'), h('span'), h('span', { text: 'MV' }), h('span', { text: 'modo' })]));
-                for (const p of jan.subs[0].penas) legenda.append(linhaLegendaMalha(p, [p], '%', [p.key, `modo:${p.malha}`]));
-                legenda.append(h('div', { class: 'tv-legend-note' }, [h('span', { class: 'tv-man-swatch' }), h('span', { text: 'faixa âmbar: malha em MAN' })]));
-            } else {
-                for (const sub of jan.subs) {
-                    for (const p of sub.penas) {
-                        if (p.sp) continue;
-                        const sp = sub.penas.find(x => x.sp && x.de === p.key) ?? null;
-                        legenda.append(linhaLegendaSimples(p, sub.unidade, sp));
-                    }
-                }
-            }
+        const rows = janelasVisiveis.map(jan => {
+            if (!rowViews.has(jan)) rowViews.set(jan, criarLinha(jan));
+            return rowViews.get(jan);
         });
+        linhas.replaceChildren(...rows.map(({ row }) => row));
+        legendObserver.disconnect();
+        for (const { legenda } of rows) legendObserver.observe(legenda);
+        plots = rows.flatMap(({ items }, index) => {
+            for (const item of items) item.ultimo = index === rows.length - 1;
+            return items;
+        });
+        applyRowHeights();
         aplicarDestaque();
+    }
+
+    function criarLinha(jan) {
+        const items = [];
+        const area = h('div', { class: 'tv-plot' });
+        const legenda = h('div', { class: 'tv-legend' });
+        const row = h('div', { class: `tv-row tv-row-${jan.id}` }, [area, legenda]);
+        aplicarCategoria(row, jan.categoria);
+        jan.subs.forEach((sub, i) => {
+            const canvas = h('canvas', { class: 'tv-canvas' });
+            const caixa = h('div', { class: 'tv-sub' }, [canvas]);
+            area.append(caixa);
+            const item = { canvas, caixa, janela: jan, sub, primeiroSub: i === 0 };
+            items.push(item);
+            ligarPonteiro(item);
+        });
+        area.append(createPlotGrip(jan, row, legenda));
+
+        // Legenda
+        legenda.append(h('div', { class: 'tv-legend-head' }, [
+            h('strong', { text: jan.titulo }),
+            jan.subtitulo ? h('span', { text: jan.subtitulo }) : null
+        ]));
+        if (jan.id === 'controladas' && jan.malhas) {
+            legenda.append(h('div', { class: 'tv-legend-row tv-legend-cols' }, [h('span'), h('span'), h('span'), h('span', { text: 'PV' }), h('span', { text: 'SP' })]));
+            for (const sub of jan.subs) {
+                for (let k = 0; k < sub.penas.length; k += 2) {
+                    const pv = sub.penas[k];
+                    const sp = sub.penas[k + 1];
+                    legenda.append(linhaLegendaMalha(pv, [pv, sp], sub.unidade, [pv.key, sp.key]));
+                }
+            }
+        } else if (jan.id === 'manipuladas' && jan.malhas) {
+            legenda.append(h('div', { class: 'tv-legend-row tv-legend-cols' }, [h('span'), h('span'), h('span'), h('span', { text: 'MV' }), h('span', { text: 'modo' })]));
+            for (const p of jan.subs[0].penas) legenda.append(linhaLegendaMalha(p, [p], '%', [p.key, `modo:${p.malha}`]));
+            legenda.append(h('div', { class: 'tv-legend-note', text: 'AUTO: tracejado · MAN: contínuo · Indisponível: pontilhado' }));
+        } else {
+            for (const sub of jan.subs) {
+                for (const p of sub.penas) {
+                    if (p.sp) continue;
+                    const sp = sub.penas.find(x => x.sp && x.de === p.key) ?? null;
+                    legenda.append(linhaLegendaSimples(p, sub.unidade, sp));
+                }
+            }
+        }
+        return { row, items, legenda };
     }
 
     function linhaLegendaSimples(p, unidade, sp = null) {
@@ -449,13 +599,12 @@ export function createTrends(host, { getRuntime = () => ({}) } = {}) {
         frameWindow = owner;
         frameInteracao = owner.requestAnimationFrame(() => { frameInteracao = null; desenhar(); });
     }
-    function ligarPonteiro(canvas, caixa, sub, ultimo) {
+    function ligarPonteiro(item) {
+        const { canvas, caixa } = item;
         const geometry = () => {
             const r = canvas.getBoundingClientRect();
-            const faixas = sub.faixasModo?.length ?? 0;
-            return { left: r.left + MARGEM.esq, top: r.top + MARGEM.topo,
-                width: Math.max(1, r.width - MARGEM.esq - MARGEM.dir),
-                height: Math.max(1, r.height - MARGEM.topo - MARGEM.base - (faixas ? faixas * ALTURA_FAIXA + 6 : 0) - (ultimo ? ALTURA_EIXO_T : 0)) };
+            const { x0, x1, y0, y1 } = limitesPlot(r.width, r.height, item.ultimo);
+            return { left: r.left + x0, top: r.top + y0, width: x1 - x0, height: y1 - y0 };
         };
         bindTimeline(canvas, caixa, geometry, estadoTemporal, state => {
             janela = state.duration; aoVivo = state.follow; fimVista = state.end;
@@ -480,6 +629,7 @@ export function createTrends(host, { getRuntime = () => ({}) } = {}) {
         if (base !== ultimaBase || (ultimo && t < ultimo.t - 0.05) || (base === 'sim' && cenario !== ultimoCenario && ultimoCenario !== null)) {
             if (gravando && ultimo && t < ultimo.t - 0.05) pararGravacao('Registro encerrado: a simulação foi reiniciada.');
             amostras = [];
+            ultimaLeitura.clear();
             aoVivo = true;
             fimVista = null;
         }
@@ -488,14 +638,27 @@ export function createTrends(host, { getRuntime = () => ({}) } = {}) {
         if (ultimo && amostras.length && t - ultimo.t < 0.1) return;
 
         const valores = {};
+        const limitesNivel = {};
         for (const sensor of plant.levelSensors) {
             valores[sensor.id] = finito(sensor.heightCm);
+            const { aboveLevelLimit, extrapolated } = sensor.diagnostics ?? {};
+            if (aboveLevelLimit || extrapolated) limitesNivel[sensor.id] = { aboveLevelLimit, extrapolated };
         }
         for (const sensor of plant.flowSensors) valores[sensor.id] = finito(sensor.flow);
-        // As séries diretas de atuadores ficam sem amostras em HARDWARE.
+        // O CSV preserva as colunas atuais. O gráfico também usa o readback publicado em HARDWARE.
         const atuadoresConhecidos = runtime.backendMode !== 'HARDWARE';
-        for (const bomba of plant.pumps) valores[bomba.id] = !atuadoresConhecidos || bomba.power == null ? null : bomba.power ? (finito(bomba.command) === null ? null : bomba.command * 100) : 0;
-        for (const valvula of plant.actuatedValves) valores[valvula.id] = !atuadoresConhecidos || finito(valvula.opening) === null ? null : valvula.opening * 100;
+        for (const bomba of plant.pumps) {
+            const comando = finito(bomba.command);
+            const percentual = bomba.power == null ? null : !bomba.power ? 0 : comando === null ? null : comando * 100;
+            valores[`atuador.${bomba.id}`] = percentual;
+            valores[bomba.id] = atuadoresConhecidos ? percentual : null;
+        }
+        for (const valvula of plant.actuatedValves) {
+            const abertura = finito(valvula.opening);
+            const percentual = abertura === null ? null : abertura * 100;
+            valores[`atuador.${valvula.id}`] = percentual;
+            valores[valvula.id] = atuadoresConhecidos ? percentual : null;
+        }
         const modos = {};
         for (const [tag, malha] of Object.entries(runtime.loops ?? {})) {
             valores[`${tag}.pv`] = finito(malha.pv);
@@ -503,7 +666,10 @@ export function createTrends(host, { getRuntime = () => ({}) } = {}) {
             valores[`${tag}.mv`] = finito(malha.mv) === null ? null : malha.mv * 100;
             modos[tag] = malha.quality === 'bad' ? 'BAD' : (malha.effectiveMode ?? malha.mode ?? '—');
         }
-        const amostra = { t, data: agora, valores, modos };
+        const amostra = { t, data: agora, valores, modos, limitesNivel };
+        for (const [key, value] of Object.entries(valores)) {
+            if (value !== null) ultimaLeitura.set(key, t);
+        }
         amostras.push(amostra);
         if (amostras.length > MAX_AMOSTRAS) amostras.splice(0, amostras.length - MAX_AMOSTRAS);
 
@@ -514,19 +680,6 @@ export function createTrends(host, { getRuntime = () => ({}) } = {}) {
     }
 
     // DESENHO
-    function lerEstilo() {
-        const css = raiz.ownerDocument.defaultView.getComputedStyle(raiz);
-        const v = (nome, padrao) => css.getPropertyValue(nome).trim() || padrao;
-        estilo = {
-            tinta: v('--ink', '#1c1d21'),
-            suave: v('--muted', '#5f6168'),
-            regra: v('--rule', '#d9d9d9'),
-            papel: v('--paper', '#ffffff'),
-            man: v('--man', '#b45309'),
-            ruim: v('--bad', '#9333ea')
-        };
-    }
-
     function amostraEm(t) {
         if (!amostras.length) return null;
         let lo = 0;
@@ -546,8 +699,7 @@ export function createTrends(host, { getRuntime = () => ({}) } = {}) {
 
     function desenhar() {
         if (!visivel) return;
-        if (!estilo) lerEstilo();
-        vazio.hidden = amostras.length > 1;
+        vazio.hidden = !janelasVisiveis.length || amostras.length > 1;
         botaoAoVivo.classList.toggle('active', aoVivo);
         botaoAoVivo.disabled = aoVivo;
         botaoAoVivo.textContent = aoVivo ? 'Seguindo tempo atual' : 'Voltar ao mais recente';
@@ -563,7 +715,9 @@ export function createTrends(host, { getRuntime = () => ({}) } = {}) {
         for (const campo of linhas.querySelectorAll('.tv-value')) {
             const valor = ref ? ref.valores[campo.dataset.key] : null;
             const unidade = campo.dataset.unit;
-            campo.textContent = valor === null || valor === undefined ? '—' : `${numero(valor, Number(campo.dataset.digits))} ${unidade}`;
+            const limite = ref?.limitesNivel[campo.dataset.key];
+            campo.textContent = valor == null ? '—' : (limite?.extrapolated ? '≈ ' : '')
+                + (limite?.aboveLevelLimit ? '30+ cm' : `${numero(valor, Number(campo.dataset.digits))} ${unidade}`);
         }
         for (const campo of linhas.querySelectorAll('.tv-spval')) {
             const valor = ref ? ref.valores[campo.dataset.key] : null;
@@ -572,7 +726,10 @@ export function createTrends(host, { getRuntime = () => ({}) } = {}) {
         for (const campo of linhas.querySelectorAll('.tv-mode')) {
             const modo = ref ? ref.modos[campo.dataset.mode] : null;
             campo.textContent = modo === 'BAD' ? 'sem PV' : modo ?? '—';
-            campo.className = `tv-mode${modo && !['AUTO', '—'].includes(modo) ? ' man' : ''}`;
+            const unknown = !modo || modo === '—' || modo === 'BAD';
+            campo.className = `tv-mode${unknown ? ' unknown' : modo === 'MAN' ? ' man' : ''}`;
+            const linha = campo.parentElement.querySelector('.tv-swatch line');
+            linha.setAttribute('stroke-dasharray', tracoMV(modo).join(' ') || 'none');
         }
         linhas.classList.toggle('at-cursor', cursor !== null);
         const base = ultimaBase === 'relogio' ? 'horário do computador' : 'tempo de simulação';
@@ -581,8 +738,8 @@ export function createTrends(host, { getRuntime = () => ({}) } = {}) {
     }
 
     function faixaY(sub, visiveis) {
+        if (sub.unidade === '%') return [0, 110];
         const f = sub.faixa;
-        if (!f.auto) return [f.min, f.max];
         let min = Infinity;
         let max = -Infinity;
         for (const a of visiveis) {
@@ -594,6 +751,7 @@ export function createTrends(host, { getRuntime = () => ({}) } = {}) {
                 if (v > max) max = v;
             }
         }
+        if (!f.auto) return [f.min, Math.max(f.max, max)];
         if (!Number.isFinite(min)) return [f.min, f.deZero ? f.min + (f.spanMin ?? 1) : f.max];
         if (f.deZero) min = 0;
         let span = max - min;
@@ -605,10 +763,38 @@ export function createTrends(host, { getRuntime = () => ({}) } = {}) {
         }
         const folga = span * 0.12;
         const lo = f.deZero ? 0 : Math.max(f.min, min - folga);
-        let hi = Math.min(f.max, max + folga);
+        let hi = Math.min(Math.max(f.max, max), max + folga);
         if (hi <= lo) hi = lo + (f.spanMin ?? 1);
         const passo = passoBonito(hi - lo, 4);
         return [Math.max(f.min, Math.floor(lo / passo) * passo), Math.ceil(hi / passo) * passo];
+    }
+
+    function caminhosMV(visiveis, p, xDe, yDe, passo) {
+        const caminhos = new Map();
+        let anterior = null;
+        let ativo = null;
+        for (let i = 0; i < visiveis.length; i++) {
+            const a = visiveis[i];
+            const v = a.valores[p.key];
+            if (v == null) {
+                anterior = ativo = null;
+                continue;
+            }
+            const atual = { x: xDe(a.t), y: yDe(v), traco: tracoMV(a.modos[p.malha]) };
+            if (anterior) {
+                const traco = anterior.traco;
+                if (!caminhos.has(traco)) caminhos.set(traco, new Path2D());
+                const caminho = caminhos.get(traco);
+                if (ativo !== traco) caminho.moveTo(anterior.x, anterior.y);
+                // Preserva transições e lacunas mesmo ao reduzir pontos de históricos longos.
+                if (i % passo === 0 || atual.traco !== traco || visiveis[i + 1]?.valores[p.key] == null) {
+                    caminho.lineTo(atual.x, atual.y);
+                }
+                ativo = traco;
+            }
+            anterior = atual;
+        }
+        return caminhos;
     }
 
     function desenharPlot(item, visiveis, t0, t1) {
@@ -625,41 +811,44 @@ export function createTrends(host, { getRuntime = () => ({}) } = {}) {
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         ctx.clearRect(0, 0, largura, altura);
 
-        const faixas = sub.faixasModo ?? [];
-        const alturaFaixas = faixas.length ? faixas.length * ALTURA_FAIXA + 6 : 0;
-        const x0 = MARGEM.esq;
-        const x1 = largura - MARGEM.dir;
-        const y0 = MARGEM.topo;
-        const y1 = altura - MARGEM.base - alturaFaixas - (ultimo ? ALTURA_EIXO_T : 0);
-        if (y1 - y0 < 20) return;
+        const { x0, x1, y0, y1 } = limitesPlot(largura, altura, ultimo);
+        if (x1 <= x0 || y1 - y0 < 20) return;
         const [vmin, vmax] = faixaY(sub, visiveis);
+        const percentual = sub.unidade === '%';
+        const pisoVisual = vmin === 0 ? (percentual ? -5 : -(vmax - vmin) * .08) : vmin;
         const xDe = t => x0 + ((t - t0) / (t1 - t0)) * (x1 - x0);
-        const yDe = v => y1 - ((Math.max(vmin, Math.min(vmax, v)) - vmin) / (vmax - vmin || 1)) * (y1 - y0);
+        const yDe = v => y1 - ((Math.max(pisoVisual, Math.min(vmax, v)) - pisoVisual) / (vmax - pisoVisual || 1)) * (y1 - y0);
 
-        ctx.fillStyle = estilo.papel;
+        ctx.fillStyle = CATEGORY_COLORS[jan.categoria].plot;
         ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
 
         // Grade Y
-        ctx.font = '11px system-ui, sans-serif';
         ctx.textBaseline = 'middle';
         ctx.textAlign = 'right';
-        const passoY = passoBonito(vmax - vmin, Math.max(2, Math.min(5, Math.floor((y1 - y0) / 28))));
+        const passoY = percentual ? 50
+            : passoBonito(vmax - vmin, Math.max(2, Math.min(5, Math.floor((y1 - y0) / 28))));
         const digitosY = passoY < 1 ? (passoY < 0.1 ? 2 : 1) : 0;
         for (let v = Math.ceil(vmin / passoY - 1e-9) * passoY; v <= vmax + 1e-9; v += passoY) {
             const y = Math.round(yDe(v)) + 0.5;
-            ctx.strokeStyle = estilo.regra;
-            ctx.lineWidth = 1;
+            const principal = percentual || v === 0;
+            ctx.strokeStyle = principal ? estilo.regraPrincipal : estilo.regra;
+            ctx.lineWidth = principal ? 1.25 : 1;
+            ctx.setLineDash(principal && v !== 0 ? [4, 3] : []);
             ctx.beginPath();
             ctx.moveTo(x0, y);
             ctx.lineTo(x1, y);
             ctx.stroke();
-            ctx.fillStyle = estilo.suave;
-            ctx.fillText(numero(v, digitosY), x0 - 6, y);
+            ctx.fillStyle = principal ? estilo.tinta : estilo.suave;
+            ctx.font = principal ? '600 11px system-ui, sans-serif' : '11px system-ui, sans-serif';
+            ctx.fillText(numero(v, digitosY) + (percentual ? '%' : ''), x0 - 6, y);
         }
 
         // Grade de tempo
         const passoT = passoTempo(t1 - t0, x1 - x0);
-        const yRotuloT = y1 + alturaFaixas + 6;
+        const yRotuloT = y1 + 6;
+        ctx.setLineDash([]);
+        ctx.lineWidth = 1;
+        ctx.font = '11px system-ui, sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
         for (let t = Math.ceil(t0 / passoT) * passoT; t <= t1; t += passoT) {
@@ -676,9 +865,9 @@ export function createTrends(host, { getRuntime = () => ({}) } = {}) {
         }
 
         // Moldura, título e unidade
-        ctx.strokeStyle = '#9aa0a6';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(x0 + 0.5, y0 + 0.5, x1 - x0 - 1, y1 - y0 - 1);
+        ctx.strokeStyle = estilo.molduraPlot;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x0 + 1, y0 + 1, x1 - x0 - 2, y1 - y0 - 2);
         ctx.textBaseline = 'bottom';
         ctx.textAlign = 'left';
         ctx.fillStyle = estilo.tinta;
@@ -703,9 +892,25 @@ export function createTrends(host, { getRuntime = () => ({}) } = {}) {
             if (ocultas.has(p.key)) continue;
             const apagada = destaque !== null && p.malha !== null && p.malha !== destaque;
             ctx.globalAlpha = p.alfa * (apagada ? 0.18 : 1);
-            ctx.strokeStyle = p.cor;
-            ctx.lineWidth = p.largura + (destaque !== null && p.malha === destaque ? 0.6 : 0);
+            const larguraPena = p.largura + (destaque !== null && p.malha === destaque ? 0.6 : 0);
+            const pintar = caminho => {
+                if (PENAS_COM_HALO.has(p.cor)) {
+                    ctx.strokeStyle = estilo.papel;
+                    ctx.lineWidth = larguraPena + 1.5;
+                    caminho ? ctx.stroke(caminho) : ctx.stroke();
+                }
+                ctx.strokeStyle = p.cor;
+                ctx.lineWidth = larguraPena;
+                caminho ? ctx.stroke(caminho) : ctx.stroke();
+            };
             ctx.lineJoin = 'round';
+            if (jan.id === 'manipuladas') {
+                for (const [traco, caminho] of caminhosMV(visiveis, p, xDe, yDe, passo)) {
+                    ctx.setLineDash(traco);
+                    pintar(caminho);
+                }
+                continue;
+            }
             ctx.setLineDash(p.dash);
             ctx.beginPath();
             let aberto = false;
@@ -730,44 +935,11 @@ export function createTrends(host, { getRuntime = () => ({}) } = {}) {
                 }
                 yAnterior = y;
             }
-            ctx.stroke();
+            pintar();
         }
         ctx.globalAlpha = 1;
         ctx.setLineDash([]);
         ctx.restore();
-
-        // Faixas de modo por malha (âmbar = MAN, magenta = sem PV), abaixo das MV
-        if (faixas.length) {
-            ctx.font = '600 9px ui-monospace, Consolas, monospace';
-            ctx.textAlign = 'right';
-            ctx.textBaseline = 'middle';
-            faixas.forEach((tag, i) => {
-                const yf = y1 + 4 + i * ALTURA_FAIXA;
-                ctx.globalAlpha = destaque !== null && tag !== destaque ? 0.35 : 1;
-                ctx.fillStyle = '#eef0f2';
-                ctx.fillRect(x0, yf, x1 - x0, ALTURA_FAIXA - 3);
-                let inicio = null;
-                let modoAberto = null;
-                const fechar = fim => {
-                    const xa = Math.max(x0, xDe(inicio));
-                    const xb = Math.min(x1, xDe(fim));
-                    if (xb - xa > 0.3) {
-                        ctx.fillStyle = modoAberto === 'BAD' ? estilo.ruim : estilo.man;
-                        ctx.fillRect(xa, yf, xb - xa, ALTURA_FAIXA - 3);
-                    }
-                };
-                for (const a of visiveis) {
-                    const modo = a.modos[tag];
-                    const emMan = modo != null && !['AUTO', '—'].includes(modo);
-                    if (emMan && inicio === null) { inicio = a.t; modoAberto = modo; }
-                    if (!emMan && inicio !== null) { fechar(a.t); inicio = null; }
-                }
-                if (inicio !== null && visiveis.length) fechar(visiveis[visiveis.length - 1].t);
-                ctx.fillStyle = estilo.suave;
-                ctx.fillText(tag, x0 - 4, yf + (ALTURA_FAIXA - 3) / 2 + 0.5);
-                ctx.globalAlpha = 1;
-            });
-        }
 
         // Rótulo na ponta das linhas (identidade além da cor), empilhado se coincidirem
         if (aoVivo && visiveis.length) {
@@ -856,7 +1028,7 @@ export function createTrends(host, { getRuntime = () => ({}) } = {}) {
             ctx.lineWidth = 1;
             ctx.beginPath();
             ctx.moveTo(x, y0);
-            ctx.lineTo(x, y1 + alturaFaixas);
+            ctx.lineTo(x, y1);
             ctx.stroke();
             if (ref) {
                 for (const p of sub.penas) {
@@ -947,7 +1119,8 @@ export function createTrends(host, { getRuntime = () => ({}) } = {}) {
             ['ensaio', () => nomeEnsaio.value.trim()],
             ['cenario', l => l.cenario],
             ['modo_backend', l => l.modo],
-            ...PENAS_NIVEL.map(p => [`${p.rotulo} nivel (cm)`, l => l.valores[p.key]]),
+            ...PENAS_NIVEL.map(p => [`${p.rotulo} nivel (cm)`, l =>
+                l.diagnostics?.[p.key]?.diagnostics?.aboveLevelLimit ? '30+' : l.valores[p.key]]),
             ...PENAS_NIVEL.map(p => [`${p.rotulo} pressao (kPa)`, l => l.extras[`${p.key}.kpa`]]),
             ...PENAS_VAZAO.map(p => [`${p.rotulo} vazao (L/min)`, l => l.valores[p.key]]),
             ...PENAS_BOMBA.map(p => [`${p.rotulo} rotacao (%)`, l => l.valores[p.key]]),
@@ -975,7 +1148,14 @@ export function createTrends(host, { getRuntime = () => ({}) } = {}) {
                 const fields = PENAS_NIVEL.includes(p)
                     ? { raw: 'RAW', voltage: 'tensao ADC (V)', level: 'nivel (%)', heightCm: 'altura (cm)', status: 'status' }
                     : { raw: 'RAW', flow: 'medicao (L/min)', frequency: 'Hz derivado entre polls', pulses: 'pulsos acumulados', status: 'status' };
-                for (const [key, label] of Object.entries(fields)) colunas.push([`${id} ${label}`, l => l.diagnostics?.[id]?.[key]]);
+                for (const [key, label] of Object.entries(fields)) {
+                    colunas.push([`${id} ${label}`, l => {
+                        const sensor = l.diagnostics?.[id];
+                        if (key === 'heightCm' && sensor?.diagnostics?.aboveLevelLimit) return '30+';
+                        if (key === 'status' && sensor?.diagnostics?.extrapolated) return 'extrapolated';
+                        return sensor?.[key];
+                    }]);
+                }
                 const diagnosticFields = PENAS_NIVEL.includes(p)
                     ? { raw: 'RAW firmware', calibrated: 'calibrado firmware', filtered: 'filtrado firmware', filteredRaw: 'RAW filtrado', voltageSource: 'origem tensao ADC', valid: 'valido', outOfRange: 'fora de faixa', stale: 'stale', ageMs: 'idade firmware (ms)' }
                     : { rawFlow: 'vazao recebida', sourceUnit: 'unidade recebida', acquisitionMethod: 'metodo aquisicao', deltaPulses: 'delta pulsos entre polls', deltaSeconds: 'intervalo polls (s)', valid: 'valido', stale: 'stale', frequencySource: 'origem Hz' };
@@ -1022,10 +1202,11 @@ export function createTrends(host, { getRuntime = () => ({}) } = {}) {
             + Object.entries(malhas).map(([tag, m]) => `${tag}:${m.unit}:${m.mvTarget?.id}`).join('|');
         if (nova !== assinatura) {
             assinatura = nova;
+            rowViews.clear();
             janelasGraficos = montarJanelas(runtime);
             if (destaque !== null && !malhas[destaque]) destaque = null;
-            montarLinhas();
         }
+        atualizarComposicao();
         if (gravando || registro.length) atualizarRegistro();
         desenhar();
     }
@@ -1033,7 +1214,10 @@ export function createTrends(host, { getRuntime = () => ({}) } = {}) {
     function mostrar(sim) {
         visivel = Boolean(sim);
         raiz.hidden = !visivel;
-        if (visivel) agendarDesenho();
+        if (visivel) {
+            applyRowHeights();
+            agendarDesenho();
+        }
     }
 
     function destacarMalha(tag) {
@@ -1042,7 +1226,7 @@ export function createTrends(host, { getRuntime = () => ({}) } = {}) {
         desenhar();
     }
 
-    new ResizeObserver(agendarDesenho).observe(linhas);
+    new ResizeObserver(agendarDesenho).observe(viewport);
 
     return {
         element: raiz,

@@ -2,7 +2,7 @@
 export function sensorSnapshot({ plant, runtime, group, selected }) {
     return JSON.parse(JSON.stringify({
         plant: { levelSensors: plant.levelSensors ?? [], flowSensors: plant.flowSensors ?? [] },
-        runtime: { backendMode: runtime.backendMode, connected: runtime.connected,
+        runtime: { backendMode: runtime.backendMode, lastBackendMode: runtime.lastBackendMode, connected: runtime.connected,
             hardware: { serial: { connected: runtime.hardware?.serial?.connected === true } } },
         group, selected
     }));

@@ -33,13 +33,16 @@ class FirmwareLoopTests(unittest.TestCase):
     def test_four_servos_timer5_and_interlocks(self):
         self.run_case("four_servos")
 
+    def test_direct_targets_preserve_limits_ack_and_stops(self):
+        self.run_case("direct_limits")
+
     def test_get_does_not_renew_heartbeat(self):
         self.run_case("get_watchdog")
 
     def test_pinmap_protocol_and_component_configs(self):
         self.run_case("pinmap")
 
-    def test_servo_ramp_and_watchdog_without_serial(self):
+    def test_servo_direct_target_and_watchdog_without_serial(self):
         self.run_case("servo")
 
     def test_oy_watchdog_without_serial(self):

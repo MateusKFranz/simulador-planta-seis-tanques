@@ -71,8 +71,18 @@ test('hello imediato, separação MODELICA/HARDWARE e sintonia sem type', async 
             assert.deepEqual(socket.sent.at(-1).tuning, tuning);
         } else {
             const before=socket.sent.length;
-            for(let i=1;i<=9;i++)assert.equal(real.applyManualActuator(`HV${i}`,50),false);
-            assert.equal(socket.sent.length,before);
+            for(let i=1;i<=9;i++) {
+                assert.equal(real.applyManualActuator(`HV${i}`,50),true);
+                assert.equal(socket.sent.at(-1).type,'manual_position');
+            }
+            assert.equal(socket.sent.length,before+9);
+            const annotation = socket.sent.at(-1);
+            socket.listeners.message({data:JSON.stringify({...annotation,type:'manual_position_result',requestId:'wrong',success:true})});
+            assert.equal(real.manualPositionResult('HV9').pending,true);
+            socket.listeners.message({data:JSON.stringify({...annotation,type:'manual_position_result',success:true})});
+            assert.equal(real.manualPositionResult('HV9').success,true);
+            assert.equal(real.realPlant.mainValve.opening,null);
+            for (const value of [NaN,Infinity,-1,101]) assert.equal(real.applyManualActuator('HV1',value),false);
             real.realRuntime.lastUpdate = Date.now();
             const control = { supported: true, ready: true, armed: false, busy: false };
             real.realRuntime.hardware = { serial: { connected: true }, control };

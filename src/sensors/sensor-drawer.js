@@ -25,6 +25,7 @@ export function createSensorDrawer(container, doc = document, options = {}) {
     container.append(panel);
     let plant = {}, runtime = {}, group = null, selected = null, opened = false;
     const zeroControls = options.calibrate ? createLevelZeroControls(doc, options.calibrate) : null;
+    if (zeroControls) panel.append(zeroControls.element);
     const snapshot = () => ({ plant, runtime, group, selected });
     if (options.onPopout) {
         const popout = element('button', 'sensor-drawer-popout', '↗');
@@ -45,6 +46,11 @@ export function createSensorDrawer(container, doc = document, options = {}) {
         (runtime.backendMode !== 'HARDWARE' || runtime.hardware?.serial?.connected === true);
     const valid = sensor => online() && ['available', 'good', 'valid'].includes(sensor.status)
         && sensor.diagnostics?.valid !== false && sensor.diagnostics?.stale !== true;
+    const formatSensor = (sensor, config) => {
+        if (online() && sensor.status === 'calibration_warning') return 'Erro de calibração';
+        if (valid(sensor) && sensor.diagnostics?.aboveLevelLimit) return '30+ cm';
+        return format(valid(sensor) ? sensor[config.field] : null, config.digits, config.unit);
+    };
 
     function render() {
         options.onSnapshot?.(snapshot());
@@ -73,21 +79,21 @@ export function createSensorDrawer(container, doc = document, options = {}) {
         for (const sensor of sensors) {
             const row = rows.get(sensor.id);
             row.button.setAttribute('aria-pressed', String(sensor.id === selected));
-            row.value.textContent = format(valid(sensor) ? sensor[config.field] : null, config.digits, config.unit);
+            row.value.textContent = formatSensor(sensor, config);
         }
         const sensor = sensors.find(item => item.id === selected);
         detail.replaceChildren();
-        if (!sensor) { detail.append(element('div', '', 'Sensor indisponível')); return; }
+        if (!sensor) { zeroControls?.update(null, runtime); detail.append(element('div', '', 'Sensor indisponível')); return; }
         const states = { available: 'OK', good: 'OK', valid: 'OK', stale: 'Desatualizado',
-            uncalibrated: 'Sem calibração', invalid: 'Inválido', unavailable: 'Sem leitura' };
+            uncalibrated: 'Sem calibração', invalid: 'Inválido', unavailable: 'Sem leitura', outside_calibration: 'Fora da faixa calibrada', calibration_warning: 'Rever calibração' };
         const diagnostics = sensor.diagnostics ?? {};
         zeroControls?.update(group === 'levelSensors' ? sensor : null, runtime);
-        const fresh = online() && ['available', 'good', 'valid', 'uncalibrated'].includes(sensor.status)
+        const fresh = online() && ['available', 'good', 'valid', 'uncalibrated', 'outside_calibration', 'calibration_warning'].includes(sensor.status)
             && diagnostics.valid !== false && diagnostics.stale !== true;
         const reading = (value, digits, unit = '') => fresh && Number.isFinite(value) ? format(value, digits, unit) : '—';
         const name = element('strong', 'sensor-drawer-selected', sensor.id);
         const value = element('div', 'sensor-drawer-primary',
-            'Valor: ' + format(valid(sensor) && fresh ? sensor[config.field] : null, config.digits, config.unit));
+            'Valor: ' + formatSensor(sensor, config));
         const raw = element('div', 'sensor-drawer-diagnostics');
         if (runtime.backendMode === 'HARDWARE') {
             const fields = group === 'levelSensors'
@@ -101,19 +107,17 @@ export function createSensorDrawer(container, doc = document, options = {}) {
             const lines = fields.map(([label, number, digits, unit]) => label + ': ' + reading(number, digits, unit));
             if (group === 'levelSensors')
                 lines.push('Amostras: ' + (fresh ? diagnostics.rawMeanCount ?? 0 : 0) + '/' + (diagnostics.rawMeanWindow ?? 10));
-            if (group === 'levelSensors' && Number.isFinite(diagnostics.zeroRaw))
-                lines.push('RAW de zero: ' + format(diagnostics.zeroRaw, 2));
+            if (group === 'levelSensors' && Number.isFinite(diagnostics.zeroRaw) && (diagnostics.zeroIsField || diagnostics.calibrationMode !== 'linear'))
+                lines.push((diagnostics.zeroIsField ? 'RAW de zero registrado: ' : 'RAW de zero provisório: ') + format(diagnostics.zeroRaw, 2));
             if (typeof diagnostics.valid === 'boolean') lines.push('Leitura válida: ' + (online() && diagnostics.stale !== true && fresh ? 'sim' : 'não'));
             raw.textContent = lines.join('\n');
         } else {
             raw.textContent = runtime.backendMode === 'MODELICA' ? 'RAW: — (não aplicável à simulação)' : 'RAW: —';
         }
         const metadata = element('div', 'sensor-drawer-metadata',
-            'Status: ' + (online() ? states[sensor.status] ?? 'Sem leitura' : 'Desconectado') +
-            '\nFonte: ' + (runtime.backendMode ?? '—'));
+            'Status: ' + (online() ? states[sensor.status] ?? 'Sem leitura' : 'Desconectado'));
         if (runtime.backendMode === 'HARDWARE' && sensor.reason) metadata.textContent += '\n' + sensor.reason;
         detail.append(name, value, raw, metadata);
-        if (zeroControls && group === 'levelSensors') detail.append(zeroControls.element);
     }
     function close() {
         opened = false;

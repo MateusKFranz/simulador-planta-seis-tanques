@@ -57,7 +57,7 @@ const plantView = new PlantView({
 
 // Gráficos continuam somente leitura.
 const trends = createTrendsPanel();
-const sensorPopout = createSensorPopout(createSensorDrawer);
+const sensorPopout = createSensorPopout((container, doc) => createSensorDrawer(container, doc, {calibrate: sendLevelZeroCommand}));
 sensorDrawer = createSensorDrawer(plantView.paperContainer.parentElement, document,
     { onPopout: sensorPopout.open, onSnapshot: sensorPopout.sync, calibrate: sendLevelZeroCommand });
 subscribeBackendSnapshot((plant, runtime) => {

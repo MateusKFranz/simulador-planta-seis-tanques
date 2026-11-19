@@ -17,7 +17,7 @@ from hardware.hardware_config import EXPECTED_OUTPUTS
 
 # Pump1/P1=B101; Pump2/P2=B102; Pump3/P3=B103.
 
-PUMP_CHANNELS = {"JIC3": 1, "JIC4": 2, "JIC1": 3}
+PUMP_CHANNELS = {"JIC1": 1, "JIC3": 2, "JIC4": 3}
 
 CONTROL_VERSION = "2.0.0-PLANTA1-CTRL"
 

@@ -9,13 +9,10 @@ int valveAngle[4] = {-1,-1,-1,-1};
 int valveTarget[4] = {-1,-1,-1,-1};
 int valveTargetPercent[4] = {-1,-1,-1,-1};
 bool valveSynced[4] = {}, valvePulsing[4] = {};
-unsigned long valveStepAt[4] = {}, heartbeatAt = 0;
+unsigned long heartbeatAt = 0;
 uint8_t oyState[2] = {}; // 0=RELEASE, 1=A, 2=B. Associação provisória.
-const unsigned long VALVE_STEP_MS = 300;
-const int VALVE_STEP_DEGREES = 5;
 
 bool pumpsActive() { return pumpPwm[0] || pumpPwm[1] || pumpPwm[2]; }
-bool valveRamping(uint8_t i) { return valveTarget[i]>=0 && valveTarget[i]!=valveAngle[i]; }
 bool controlOutputsActive() {
   if (pumpsActive() || oyState[0] || oyState[1]) return true;
   for (uint8_t i=0;i<4;++i) if (valvePulsing[i] || valveTarget[i]>=0) return true;
@@ -73,16 +70,6 @@ void controlTrip(const char* fault) {
 }
 void controlTick() {
   if(controlOutputsActive() && (unsigned long)(millis()-heartbeatAt)>=CONTROL_WATCHDOG_MS) controlTrip("WATCHDOG");
-  if(!controlArmed) return;
-  for(uint8_t i=0;i<4;++i) {
-    if(valveTarget[i]<0 || !valveSynced[i] || !valveConfigured(i)) continue;
-    if((unsigned long)(millis()-valveStepAt[i])<VALVE_STEP_MS) continue;
-    int delta=valveTarget[i]-valveAngle[i];
-    delta=constrain(delta,-VALVE_STEP_DEGREES,VALVE_STEP_DEGREES);
-    valveAngle[i]+=delta; valveStepAt[i]=millis();
-    servoSignal(i,valveAngle[i]); valvePulsing[i]=true;
-    valvePercent[i]=anglePercent(i,valveAngle[i]);
-  }
 }
 void printControl() {
   beginResponse(); Serial.print(F("OK,{\"armed\":")); Serial.print(controlArmed?"true":"false");
@@ -92,11 +79,11 @@ void printControl() {
     Serial.print(','); Serial.print(pumpConfigs[i].forward); Serial.print(']');
   }
   Serial.print(F("],\"valves\":["));
-  // lv,configurado,percentual comandado,referência,alvo,sync,pulsos,rampa,fechado,aberto,min,max,percentual alvo,pino
+  // lv,configurado,percentual comandado,referência,alvo,sync,pulsos,rampa (sempre 0),fechado,aberto,min,max,percentual alvo,pino
   for(uint8_t i=0;i<4;++i) {
     const ValveConfig &c=valveConfigs[i];
     const int values[]={c.lv,valveConfigured(i)?1:0,valvePercent[i],valveAngle[i],valveTarget[i],
-      valveSynced[i]?1:0,valvePulsing[i]?1:0,valveRamping(i)?1:0,c.closed,c.open,c.minimum,c.maximum,valveTargetPercent[i],c.pin};
+      valveSynced[i]?1:0,valvePulsing[i]?1:0,0,c.closed,c.open,c.minimum,c.maximum,valveTargetPercent[i],c.pin};
     if(i) Serial.print(','); Serial.print('[');
     for(uint8_t j=0;j<14;++j) { if(j) Serial.print(','); Serial.print(values[j]); }
     Serial.print(']');
@@ -152,10 +139,13 @@ bool handleControl(char* tokens[],uint8_t argc) {
       if((percent && (value<0 || value>100)) || (!percent && (value<c.minimum || value>c.maximum))) { respondErr("ANGLE_RANGE"); return true; }
       int angle=percent ? c.closed+(long)(c.open-c.closed)*value/100 : value;
       if(sync) {
-        stopValve(i); valveAngle[i]=angle; valvePercent[i]=anglePercent(i,angle); valveSynced[i]=true; valveStepAt[i]=millis();
+        stopValve(i); valveAngle[i]=angle; valvePercent[i]=anglePercent(i,angle); valveSynced[i]=true;
       } else {
         if(!valveSynced[i]) { respondErr("VALVE_NOT_SYNCED"); return true; }
         valveTarget[i]=angle; valveTargetPercent[i]=percent?value:anglePercent(i,angle);
+        // Referência comandada, sem feedback da posição mecânica.
+        servoSignal(i,angle); valvePulsing[i]=true;
+        valveAngle[i]=angle; valvePercent[i]=anglePercent(i,angle);
       }
     } else { respondErr("FORBIDDEN_COMMAND"); return true; }
   }

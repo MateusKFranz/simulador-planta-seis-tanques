@@ -266,8 +266,28 @@ class ManualControlTests(unittest.TestCase):
         self.apply("valve",id="LV1",percent=50)
         self.assertEqual(self.hw.confirmed["valves"][0][4],80)
         self.assertEqual(self.hw.confirmed["valves"][0][12],50)
-        self.assertLess(self.hw.confirmed["valves"][0][3],80)
+        self.assertEqual(self.hw.confirmed["valves"][0][3],80)
+        self.assertEqual(self.hw.confirmed["valves"][0][6:8],[1,0])
         self.assertFalse(self.request("valve",id="LV1",percent=101))
+
+    def test_pump_public_channels_commands_stop_and_snapshot(self):
+        import server
+        from hardware.hardware_operation import HardwareOperation
+        self.apply("arm")
+        mapping = {"JIC3":1, "JIC1":2, "JIC4":3}
+        for tag, channel in mapping.items():
+            self.apply("pump",id=tag,pwm=40+channel)
+            self.assertTrue(any(f"SET BOMBA {channel} {40+channel}" in line for line in self.device.tx))
+            self.assertEqual(self.hw.confirmed['pumps'][channel-1][0],40+channel)
+        op = HardwareOperation(copy.deepcopy(server.state),self.hw)
+        for tag, channel in mapping.items():
+            self.assertAlmostEqual(op.confirmed_mv({'tipo':'bomba','id':tag}), (40+channel)/255)
+        with patch.object(server,'BACKEND_MODE','HARDWARE'), patch.object(server,'dequi_hardware',self.hw), patch.object(server,'serial_bridge',self.bridge), patch.object(server,'get_hardware_operation',return_value=op):
+            snapshot = server.public_state()
+            for tag, channel in mapping.items(): self.assertEqual(snapshot['pumps'][tag]['pwm'],40+channel)
+        for tag, channel in mapping.items():
+            self.apply('pump',id=tag,pwm=0)
+            self.assertEqual(self.hw.confirmed['pumps'][channel-1][0],0)
 
     def test_error_and_inconsistent_ack_invalidate_confirmation(self):
         for response in ["WARN,BLOCKED", "ERR,BLOCKED", 'OK,{"armed":true,"fault":"NONE","pumps":[[0,1],[0,2],[0,1]],"valves":[[1,1,-1,-1],[0,0,-1,-1],[0,0,-1,-1],[0,0,-1,-1]]}']:

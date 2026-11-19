@@ -60,4 +60,9 @@
 .level-zero-controls button { margin: 3px; padding: 6px; cursor: pointer; }
 .level-zero-controls [role="dialog"] { border: 1px solid #87949d; border-radius: 4px; padding: 8px; }
 .level-zero-restore { font-size: 11px; }
+.level-zero-controls input { width: 100%; box-sizing: border-box; }
+.calibration-points { width: 100%; border-collapse: collapse; font-size: 11px; }
+.calibration-points td, .calibration-points th { padding: 3px; border-bottom: 1px solid #c7cdd1; text-align: left; }
+.calibration-points button { font-size: 11px; padding: 3px; }
+.calibration-quality { font-size: 11px; overflow-wrap: anywhere; }
 @media (prefers-reduced-motion: reduce) { .sensor-drawer { transition: none; } }

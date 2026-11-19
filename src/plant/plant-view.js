@@ -2886,6 +2886,11 @@ export class PlantView {
                 const known = item[field] !== null;
                 views[item.id]?.attr('body/strokeOpacity', known ? 1 : 0);
                 if (!known) views[item.id]?.attr(`${text}/text`, '—');
+                if (['manualValves','recycleValves'].includes(group)) {
+                    const hardware = this.currentRuntime.backendMode === 'HARDWARE';
+                    views[item.id]?.attr('typeLabel/text', hardware ? 'INFORMADA' : 'MANUAL');
+                    views[item.id]?.attr('root/title', hardware ? known ? 'Posição no software; sem medição física' : 'Posição não informada' : '');
+                }
                 if (group === 'threeWayBranches' && !known) {
                     const controls = this.threeWayButtons[item.id];
                     if (controls) controls.state.textContent = controls.button.textContent = '—';
@@ -2904,6 +2909,9 @@ export class PlantView {
         const mainKnown = plant.mainValve.opening !== null;
         this.mainValveView?.attr('body/strokeOpacity', mainKnown ? 1 : 0);
         if (!mainKnown) this.mainValveView?.attr('valueText/text', '—');
+        const manualHardware = this.currentRuntime.backendMode === 'HARDWARE';
+        this.mainValveView?.attr('typeLabel/text', manualHardware ? 'INFORMADA' : 'MANUAL');
+        this.mainValveView?.attr('root/title', manualHardware ? mainKnown ? 'Posição no software; sem medição física' : 'Posição não informada' : '');
         const selection = this.componentEditorSelection;
         if (selection) {
             const item = this.getComponentEditorState(selection);
@@ -3171,7 +3179,10 @@ export class PlantView {
                         sensor.pressure
                 });
                 if (this.currentRuntime.backendMode === 'HARDWARE') {
-                    view.attr('levelText/text', Number.isFinite(sensor.heightCm) ? `${sensor.heightCm.toFixed(2).replace('.', ',')} cm` : '—');
+                    const height = sensor.diagnostics?.aboveLevelLimit ? '30+ cm'
+                        : Number.isFinite(sensor.heightCm) ? `${sensor.heightCm.toFixed(2).replace('.', ',')} cm` : '—';
+                    view.attr('levelText/text', sensor.status === 'calibration_warning' ? 'Erro calib.'
+                        : sensor.diagnostics?.extrapolated ? `≈ ${height}` : height);
                     view.attr('pressureText/text', '');
                 }
             }
@@ -6012,8 +6023,11 @@ export class PlantView {
             const states = { available: 'Disponível', uncalibrated: 'Sem leitura', unavailable: 'Sem leitura', stale: 'Leitura desatualizada', invalid: 'Leitura inválida' };
             detail.textContent = `${sensor.reason ?? states[sensor.status] ?? sensor.status} · RAW ${Number.isFinite(sensor.raw) ? sensor.raw : '—'}`;
             if (level) {
-                value.textContent = `Nível: ${format(sensor.heightCm, 2, 'cm')}`;
-                detail.textContent = `RAW atual: ${Number.isFinite(sensor.raw) ? sensor.raw : '—'}${Number.isFinite(sensor.heightCm) ? '' : ` · ${sensor.reason ?? states[sensor.status] ?? 'Sem leitura'}`}`;
+                const height = sensor.status === 'calibration_warning' ? 'Erro de calibração'
+                    : diagnostic.aboveLevelLimit ? '30+ cm' : format(sensor.heightCm, 2, 'cm');
+                value.textContent = `Nível: ${height}`;
+                const reason = sensor.reason ?? (!Number.isFinite(sensor.heightCm) ? states[sensor.status] : null);
+                detail.textContent = `RAW atual: ${Number.isFinite(sensor.raw) ? sensor.raw : '—'}${reason ? ` · ${reason}` : ''}`;
             }
             if (!level && sensor.status === 'uncalibrated' && Number.isFinite(diagnostic.rawFlow)) {
                 value.textContent = format(diagnostic.rawFlow, 3, diagnostic.sourceUnit ?? 'unidade desconhecida');

@@ -269,14 +269,14 @@ function Install-MissingDependencies($s) {
     $s = Get-DependencyStatus
     if ($s.CondaOk -and -not $s.Seistanques -and -not $env:SIX_TANK_PYTHON) {
         Invoke-InstallStep 'Ambiente seistanques' 'Python 3.12 isolado para este projeto' 'https://conda.anaconda.org/conda-forge; licencas dos pacotes no plano Conda' 'Criar ambiente seistanques com Python 3.12. Nenhum outro ambiente sera alterado.' {
-            Run-Checked $s.Conda @('create','--name','seistanques','--override-channels','-c','conda-forge','python=3.12','pip')
+            Run-Checked $s.Conda @('create','--name','seistanques','--override-channels','-c','conda-forge','python=3.12','pip','--yes')
         }
         $s = Get-DependencyStatus
     }
     if ($s.InstallPython) {
         if (-not $s.Modules.pip -and $s.CondaOk -and $s.Envs -contains $s.PythonInfo.prefix) {
             Invoke-InstallStep 'pip' 'Instalar bibliotecas no ambiente selecionado' 'https://conda.anaconda.org/conda-forge' "Instalar pip somente em $($s.PythonInfo.prefix), preservando pacotes existentes." {
-                Run-Checked $s.Conda @('install','--prefix',$s.PythonInfo.prefix,'--override-channels','-c','conda-forge','--freeze-installed','pip')
+                Run-Checked $s.Conda @('install','--prefix',$s.PythonInfo.prefix,'--override-channels','-c','conda-forge','--freeze-installed','pip','--yes')
             }
             $s = Get-DependencyStatus
         }
@@ -289,7 +289,7 @@ function Install-MissingDependencies($s) {
             if ($module -eq 'pyfmi') {
                 if (-not $s.CondaOk -or $s.Envs -notcontains $s.PythonInfo.prefix) { Write-Host 'PyFMI exige ambiente Conda registrado. SIX_TANK_PYTHON nao sera substituido nem recebera PyFMI via pip.'; continue }
                 Invoke-InstallStep 'PyFMI' $purpose 'https://conda.anaconda.org/conda-forge' "Instalar somente pacotes faltantes no ambiente $($s.PythonInfo.prefix); manter instalados congelados. Revise o plano Conda." {
-                    Run-Checked $s.Conda @('install','--prefix',$s.PythonInfo.prefix,'--override-channels','-c','conda-forge','--freeze-installed','pyfmi')
+                    Run-Checked $s.Conda @('install','--prefix',$s.PythonInfo.prefix,'--override-channels','-c','conda-forge','--freeze-installed','pyfmi','--yes')
                 }
             } elseif ($s.Modules.pip) {
                 Invoke-InstallStep $package $purpose 'https://pypi.org/ (metadados/licencas de cada pacote)' "Instalar $package e dependencias necessarias com $($s.Python) -m pip, sem --upgrade." {

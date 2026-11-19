@@ -10,7 +10,7 @@ const assert = require('node:assert/strict');
    const valves=Array.from({length:4},(_,i)=>[i+1,1,53,47,-1,1,0,0,10,80,10,80,-1,36+i]);
    window.snapshot={mode:'HARDWARE',operation:{mode:'MANUAL',autoBlocked:[],fixed:{}},
     hardware:{serial:{connected:true},control:{supported:true,compatible:true,ready:true,armed:true,busy:false,
-     pumpChannels:{JIC3:1,JIC4:2,JIC1:3},confirmed:{armed:true,fault:'NONE',pumps:[[150,1],[80,1],[40,1]],valves,oy:[1,2]}}},
+     pumpChannels:{JIC3:1,JIC1:2,JIC4:3},confirmed:{armed:true,fault:'NONE',pumps:[[150,1],[80,1],[40,1]],valves,oy:[1,2]}}},
     sim:{},loops:{},scenarios:[],levelSensors:{},flowSensors:{}};
    window.WebSocket=class {
     static OPEN=1;static CONNECTING=0;
@@ -126,9 +126,9 @@ const assert = require('node:assert/strict');
   await page.evaluate(()=>{snapshot.hardware.serial.connected=false;socket.push();});
   assert.match(await page.locator('.hw-reset-result').innerText(),/não pôde ser confirmado/);
   await open('HV1');
-  assert.ok(await row.locator('.value').isDisabled());
-  assert.ok(await row.getByRole('button',{name:'Aplicar',exact:true}).isDisabled());
-  assert.match(await row.locator('.reason').innerText(),/manual física/);
+  assert.ok(await row.locator('.value').isEnabled());
+  assert.ok(await row.getByRole('button',{name:'Aplicar',exact:true}).isEnabled());
+  assert.match(await row.locator('.reason').innerText(),/Anotação de operação/);
   // Snapshots parciais não inventam confirmação nem liberam controles.
   for (const confirmed of [null, {}, {pumps:[],valves:[],oy:[]}, {pumps:null,valves:[null],oy:null}]) {
     await page.evaluate(confirmed=>{

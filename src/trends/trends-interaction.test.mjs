@@ -30,8 +30,11 @@ test('zoom contínuo ancorado, limites, clamp e pan com duração preservada', (
     assert.equal(panTime(s, 1e5).end, 1000);
     assert.equal(panTime(s, -10).duration, 120);
     assert.deepEqual(timeRange({ ...s, last: 10 }), [-110, 10]);
-    const live = zoomTime({ ...s, follow: true }, -100, .2);
-    assert.ok(live.follow); assert.equal(timeRange(live)[1], 1000);
+    const following = { ...s, follow: true };
+    const live = zoomTime(following, -100, .2);
+    assert.equal(live.follow, false);
+    near(timeRange(live)[0] + .2 * live.duration, timeRange(following)[0] + .2 * following.duration);
+    assert.ok(zoomTime(following, -100, 1).follow);
     assert.equal(panTime(live, -20).follow, false);
     const restored = { ...live, follow: true, end: null };
     near(restored.duration, live.duration); assert.equal(timeRange(restored)[1], 1000);
@@ -48,10 +51,12 @@ test('ponteiro principal arrasta conteúdo, ignora outros IDs e encerra em up/ca
     canvas.fire('pointerdown'); canvas.fire('pointercancel'); assert.equal(canvas.captured, null);
     assert.equal(box.classes.size, 0);
 });
-test('wheel normal faz zoom, Ctrl faz só pan e eventos externos não são consumidos', () => {
+test('wheel faz zoom só dentro do gráfico, Ctrl percorre o histórico', () => {
     const canvas = new Node(); let s = state();
     bindTimeline(canvas, new Node(), () => ({ left: 0, top: 0, width: 600, height: 200 }), () => s, next => s = next, () => {});
+    assert.ok(!canvas.fire('wheel', { clientX: -1, deltaY: -10 }).prevented);
     assert.ok(canvas.fire('wheel', { deltaY: -10 }).prevented);
+    assert.ok(!canvas.fire('wheel', { deltaY: 0 }).prevented);
     assert.ok(s.duration < 120);
     const duration = s.duration, end = s.end;
     assert.ok(canvas.fire('wheel', { deltaY: 30, ctrlKey: true }).prevented);
@@ -70,7 +75,11 @@ test('resize integrado respeita limites, direção, persistência e reset por du
         assert.equal(panel.style.height, '400px');
         handle.fire('pointerdown', { clientY: 500 }); handle.fire('pointermove', { clientY: 400 }); handle.fire('pointerup');
         assert.equal(panel.style.height, '500px'); assert.equal(storage.get('trends-panel-height'), '500');
-        handle.fire('dblclick'); assert.equal(panel.style.height, `${panelHeight(824 * .55, 824)}px`);
+        handle.fire('dblclick'); assert.equal(panel.style.height, '');
+        const fresh = new Node();
+        setupTrendsResize(fresh, { clientHeight: 1200, querySelector: () => ({ offsetHeight: 60 }) },
+            new Node(), () => {}, { getItem: () => null });
+        assert.equal(fresh.style.maxHeight, '1124px');
         assert.equal(panelHeight(1e6, 824), panelLimits(824).max);
         assert.equal(panelHeight(-1e6, 824), panelLimits(824).min);
     } finally { globalThis.ResizeObserver = previous; }

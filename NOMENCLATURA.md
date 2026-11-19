@@ -78,3 +78,15 @@ As calibrações Python usam os IDs oficiais. Sensor ausente permanece sem leitu
 FI1 está em `(0.425, 0.46)` e FI2 em `(0.555, 0.46)`, coordenadas normalizadas de configuração. As âncoras OY1_A_OUT e OY2_B_OUT são pontos de passagem invisíveis que preservam a geometria das tubulações de saída. Os traços de continuidade conectam seus extremos sem alterar os vértices das rotas.
 
 As saídas XY101A/XY101B e XY102A/XY102B da FMU alimentam os estados dos ramos de OY1 e OY2. Os sinais internos de vazão F_B*, F_LV*, F_XV* e q_TQ* são publicados em segments com os IDs oficiais dos equipamentos ou ramos correspondentes.
+
+## Canais físicos HARDWARE
+
+| Identificação HMI | Canal Arduino | RPWM / LPWM |
+| --- | --- | --- |
+| JIC3 | BOMBA1 | D9 / D10 |
+| JIC1 | BOMBA2 | D7 / D8 |
+| JIC4 | BOMBA3 | D5 / D6 |
+
+Correspondência adotada pela observação em bancada, ainda sujeita à confirmação
+física completa das três bombas. `pumpChannels` é publicado pelo backend.
+Essa tabela não altera os nomes internos da FMU nem os pareamentos dos cenários.

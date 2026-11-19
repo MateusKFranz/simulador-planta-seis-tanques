@@ -101,14 +101,35 @@ export function canSendModelicaCommand() {
         realRuntime.connected && realSocket?.readyState === WebSocket.OPEN && realRuntime.modelicaReady === true;
 }
 
-export function sendLevelZeroCommand(action, id, raw) {
+export function sendLevelZeroCommand(action, id, raw, details = {}) {
     const sensor = realPlant.levelSensors.find(s => s.id === id);
     if (expectedBackendMode !== 'HARDWARE' || realRuntime.backendMode !== 'HARDWARE' ||
         !realRuntime.connected || realSocket?.readyState !== WebSocket.OPEN || !sensor ||
-        !['calibrate', 'restore'].includes(action) ||
-        (action === 'calibrate' && (!Number.isFinite(raw) || raw < 0 || raw > 1023)))
+        !['calibrate', 'restore', 'add', 'replace', 'delete'].includes(action) ||
+        (['calibrate','add','replace'].includes(action) && (!Number.isFinite(raw) || raw < 0 || raw > 1023)))
         return Promise.reject(new Error('Leitura capturada ou conexão indisponível para calibração.'));
-    return requestLevelZero(message => realSocket.send(JSON.stringify(message)), action, id, raw);
+    return requestLevelZero(message => realSocket.send(JSON.stringify(message)), action, id, raw, details);
+}
+
+const manualRecords = new Map();
+let manualSequence = 0;
+export function canRecordManualPosition() {
+    return expectedBackendMode === 'HARDWARE' && realRuntime.backendMode === 'HARDWARE' && realRuntime.connected && realSocket?.readyState === WebSocket.OPEN;
+}
+export function manualPositionResult(id) {
+    const record = manualRecords.get(id);
+    if (record?.pending && (!canRecordManualPosition() || Date.now()-record.sentAt >= 8000)) {
+        record.pending = false;
+        record.message = 'Registro não confirmado; confira o estado recebido antes de repetir.';
+    }
+    return record;
+}
+export function recordManualPosition(id, percent) {
+    if (!canRecordManualPosition() || !/^HV[1-9]$/.test(id) || !Number.isFinite(percent) || percent<0 || percent>100) return false;
+    const requestId = `hv-${Date.now()}-${++manualSequence}`;
+    manualRecords.set(id, {requestId, success:false, pending:true, sentAt:Date.now()});
+    realSocket.send(JSON.stringify({type:'manual_position', requestId, id, percent}));
+    return true;
 }
 
 export function canCommandComponent(kind, id) {
@@ -189,6 +210,7 @@ export function sendOperationCommand(message) {
 }
 export function applyManualActuator(id, value, unit = 'percent') {
     if (/^HV[1-9]$/.test(id)) {
+        if (expectedBackendMode === 'HARDWARE') return unit === 'percent' && recordManualPosition(id,value);
         if (expectedBackendMode !== 'MODELICA' || unit !== 'percent' ||
             !Number.isFinite(value) || value < 0 || value > 100) return false;
         if (id === 'HV9') return setRealMainValveOpening(value/100);
@@ -268,6 +290,10 @@ function handleRealWebSocketMessage(
     }
 
     if (message.type === 'level_zero_result') { receiveLevelZero(message); return; }
+    if (message.type === 'manual_position_result') {
+        if (manualRecords.get(message.id)?.requestId === message.requestId) manualRecords.set(message.id, {...message, pending:false});
+        return;
+    }
     if (
         message.type ===
         'state'
@@ -332,7 +358,11 @@ export function setRealConnectionState(
 ) {
     if (!connected) {
         pendingHardwareCommand = null;
+        const calibration = realRuntime.backendMode === 'HARDWARE' ? realPlant.levelSensors.map(s => [s.id,
+            Object.fromEntries(Object.entries(s.diagnostics ?? {}).filter(([key]) => ['calibrationPoints','calibrationMode','calibrationQuality','calibrationWarning','slope','intercept','rmseCm','residualsCm','heightRange','rawRange','zeroRaw','zeroIsField','heightLimitCm'].includes(key)))]) : [];
+        realRuntime.lastBackendMode = realRuntime.backendMode ?? realRuntime.lastBackendMode;
         Object.assign(realPlant, normalizeBackendState());
+        for (const [id, diagnostics] of calibration) realPlant.levelSensors.find(s=>s.id===id).diagnostics = diagnostics;
         realRuntime.flows = {};
         realRuntime.sim = {};
         realRuntime.loops = {};
@@ -435,6 +465,7 @@ export function selectBackendMode(mode) {
     cancelReconnect();
     reconnectAttempt = 0;
     expectedBackendMode = mode;
+    realRuntime.lastBackendMode = null;
     Object.assign(realPlant, normalizeBackendState());
     realRuntime.flows = {};
     realRuntime.sim = {};

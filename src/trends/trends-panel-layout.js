@@ -1,5 +1,5 @@
 export function panelLimits(available) {
-    const max = Math.max(80, available - Math.min(180, available * .4));
+    const max = Math.max(0, available);
     return { min: Math.min(320, max), max };
 }
 export function panelHeight(value, available) {
@@ -10,19 +10,24 @@ export function panelHeight(value, available) {
 export function setupTrendsResize(panel, host, handle, redraw, storage = localStorage) {
     const key = 'trends-panel-height';
     let preferred = null, drag = null;
-    try { preferred = Number(storage.getItem(key)) || null; } catch { /* Persistência opcional. */ }
-    const available = () => Math.max(100, host.clientHeight - (host.querySelector('.topbar')?.offsetHeight ?? 0) - 16);
-    const apply = value => {
+    try {
+        const stored = Number(storage.getItem(key));
+        if (Number.isFinite(stored) && stored > 0) preferred = stored;
+    } catch { /* Persistência opcional. */ }
+    const topbar = host.querySelector('.topbar');
+    const available = () => Math.max(0, host.clientHeight - (topbar?.offsetHeight ?? 0) - 16);
+    const apply = () => {
         if (panel.classList.contains('tv-detached')) return;
-        const height = panelHeight(value ?? available() * .55, available());
-        panel.style.height = `${height}px`;
-        const limits = panelLimits(available());
-        handle.setAttribute('aria-valuenow', height);
+        const space = available();
+        const limits = panelLimits(space);
+        panel.style.maxHeight = `${limits.max}px`;
+        panel.style.height = preferred === null ? '' : `${Math.max(0, Math.min(preferred, limits.max))}px`;
+        handle.setAttribute('aria-valuenow', Math.round(panel.getBoundingClientRect().height));
         handle.setAttribute('aria-valuemin', limits.min);
         handle.setAttribute('aria-valuemax', limits.max);
         redraw();
     };
-    const save = () => { try { storage.setItem(key, String(preferred)); } catch { /* Persistência opcional. */ } };
+    const save = () => { try { storage.setItem(key, preferred === null ? '' : String(preferred)); } catch { /* Persistência opcional. */ } };
     handle.addEventListener('pointerdown', event => {
         if (event.button !== 0 || drag) return;
         event.preventDefault();
@@ -33,7 +38,7 @@ export function setupTrendsResize(panel, host, handle, redraw, storage = localSt
     handle.addEventListener('pointermove', event => {
         if (!drag || drag.id !== event.pointerId) return;
         preferred = panelHeight(drag.height + drag.y - event.clientY, available());
-        apply(preferred);
+        apply();
     });
     const stop = event => {
         if (!drag || event.pointerId !== drag.id) return;
@@ -42,16 +47,36 @@ export function setupTrendsResize(panel, host, handle, redraw, storage = localSt
         if (preferred !== null) save();
     };
     for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) handle.addEventListener(type, stop);
-    handle.addEventListener('dblclick', () => { preferred = panelHeight(available() * .55, available()); apply(preferred); save(); });
+    handle.addEventListener('dblclick', () => {
+        preferred = null;
+        apply();
+        save();
+    });
     handle.addEventListener('keydown', event => {
         if (!['ArrowUp', 'ArrowDown'].includes(event.key)) return;
         event.preventDefault();
         preferred = panelHeight(panel.getBoundingClientRect().height + (event.key === 'ArrowUp' ? 20 : -20), available());
-        apply(preferred); save();
+        apply(); save();
     });
-    const observer = new ResizeObserver(() => apply(preferred)); observer.observe(host);
-    apply(preferred);
-    return { apply: () => apply(preferred), destroy: () => observer.disconnect() };
+    const observer = new ResizeObserver(apply);
+    observer.observe(host);
+    if (topbar) observer.observe(topbar);
+    apply();
+    return { apply, destroy: () => observer.disconnect(),
+        keepHeight() {
+            if (preferred !== null || panel.classList.contains('tv-detached')) return;
+            const height = panel.getBoundingClientRect().height;
+            if (height <= 0) return;
+            preferred = height;
+            apply();
+        },
+        plotResized(delta) {
+            if (preferred === null || panel.classList.contains('tv-detached')) return;
+            // O ajuste manual acompanha a variação do conteúdo.
+            preferred = Math.max(Math.min(preferred, 160), preferred + delta);
+            apply();
+        }
+    };
 }
 
 // Move a mesma view: histórico, canvases, listeners e registro continuam na principal.

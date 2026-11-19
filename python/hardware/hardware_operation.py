@@ -5,7 +5,7 @@ from simulation import cenarios
 from simulation.controle import BancoControladores
 from common.operation import Operation, valid_loop_command
 from hardware.hardware_control import PUMP_CHANNELS
-from hardware.hardware_config import AUTO_VALIDATED_PVS, AUTO_VALIDATED_MANUAL_VALVES
+from hardware.hardware_config import AUTO_VALIDATED_PVS
 from common.instrument_ids import LEVEL_IDS
 
 
@@ -45,6 +45,9 @@ class HardwareOperation:
         if pv["tipo"] == "nivel":
             id = LEVEL_IDS[int(pv["id"][2:])-1]
             sensor = self.state["levelSensors"].get(id, {})
+            diagnostics = sensor.get("diagnostics", {})
+            if diagnostics.get("extrapolated") or diagnostics.get("aboveLevelLimit"):
+                return None
             value = sensor.get("heightCm")
             ids = [id]
         else:
@@ -76,9 +79,6 @@ class HardwareOperation:
         for m in scenario["malhas"]:
             if self.read_pv(m["pv"]) is None:
                 reasons.append(f'{m["tag"]}: PV ausente, desatualizada ou sem calibração validada para AUTO')
-        for id, value in fixed.get("valvulas_manuais", {}).items():
-            if AUTO_VALIDATED_MANUAL_VALVES.get(id) != value:
-                reasons.append(f'{id}: posição manual física do cenário não confirmada')
         data = c.confirmed if c.fresh() else None
         if data:
             for target in targets:

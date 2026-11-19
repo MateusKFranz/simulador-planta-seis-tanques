@@ -21,6 +21,13 @@ void idleLoopUntil(unsigned long deadline) {
     assert(Serial.readCount==reads);
 }
 
+void reject(const std::string &command) {
+    Serial.tx.str(""); Serial.tx.clear();
+    for(char c:command+"\n") Serial.rx.push_back(c);
+    loop();
+    assert(Serial.tx.str().find("ERR,")!=std::string::npos);
+}
+
 int main(int argc,char**argv) {
     assert(argc==2);
     setup();
@@ -49,13 +56,10 @@ int main(int argc,char**argv) {
             receive("SET LVSYNC 2 70");
             assert(servoPulseTicks[1]==0);
             receive("SET VALVULA 2 100");
-            assert(valveAngle[1]==70 && valveTarget[1]==12);
-            idleLoopUntil(299); assert(valveAngle[1]==70);
-            idleLoopUntil(300); assert(valveAngle[1]==65);
-            idleLoopUntil(599); assert(valveAngle[1]==65);
-            idleLoopUntil(600); assert(valveAngle[1]==60);
+            assert(valveAngle[1]==12 && valveTarget[1]==12 && servoPulseTicks[1]==1440);
+            idleLoopUntil(299); assert(valveAngle[1]==12);
             receive("SET LVANGLE 2 75");
-            idleLoopUntil(900); assert(valveAngle[1]==65);
+            assert(valveAngle[1]==75 && servoPulseTicks[1]==2700);
         } else receive("SET OY 1 A");
         idleLoopUntil(5001);
         assert(!controlArmed && !controlOutputsActive());
@@ -67,6 +71,40 @@ int main(int argc,char**argv) {
         for(int i=0;i<10;++i) TIMER5_COMPA_vect();
         assert(simulatedModes[36]==OUTPUT && simulatedPins[36]==LOW);
         std::cout << "PASS: isolated servo/OY watchdog and safe reference\n";
+    } else if (!strcmp(argv[1],"direct_limits")) {
+        for(int i=0;i<4;++i) {
+            const std::string id=std::to_string(i+1);
+            assert(!valveSynced[i] && servoPulseTicks[i]==0);
+            reject("SET LVANGLE "+id+" 80");
+            receive("ARM");
+            reject("SET LVANGLE "+id+" 80");
+            reject("SET LVSYNC "+id+" 9");
+            reject("SET LVSYNC "+id+" 81");
+            receive("SET LVSYNC "+id+" 10");
+            assert(servoPulseTicks[i]==0);
+            receive("@42 SET LVANGLE "+id+" 80");
+            assert(Serial.tx.str().find("@42 OK,")==0);
+            const std::string readback="["+id+",1,100,80,80,1,1,0,10,80,10,80,100,"+std::to_string(36+i)+"]";
+            assert(Serial.tx.str().find(readback)!=std::string::npos);
+            assert(valveAngle[i]==80 && servoPulseTicks[i]==2888);
+            for(const std::string &invalid:{"LVANGLE "+id+" 9","LVANGLE "+id+" 81","VALVULA "+id+" -1","VALVULA "+id+" 101","LVANGLE "+id+" abc"}) {
+                reject("SET "+invalid);
+                assert(valveAngle[i]==80 && servoPulseTicks[i]==2888);
+            }
+            receive("SET VALVULA "+id+" 0");
+            assert(valveAngle[i]==10 && servoPulseTicks[i]==2110);
+            receive("SET LVSTOP "+id+" 0");
+            assert(servoPulseTicks[i]==0 && valveTarget[i]==-1 && valveAngle[i]==10);
+            idleLoopUntil(simulatedMs+1);
+            assert(servoPulseTicks[i]==0);
+            receive("SET LVANGLE "+id+" 80");
+            receive("EMERGENCY STOP");
+            assert(!controlArmed && servoPulseTicks[i]==0);
+            reject("ARM"); reject("SET LVANGLE "+id+" 10");
+            receive("RESET FAULT");
+            assert(!controlArmed && !valveSynced[i] && servoPulseTicks[i]==0);
+        }
+        std::cout << "PASS: direct targets, absolute limits, ACK/readback, SYNC, STOP and E-stop for four LV\n";
     } else if (!strcmp(argv[1],"four_servos")) {
         receive("ARM");
         for (int i=0;i<4;++i) {
@@ -79,6 +117,7 @@ int main(int argc,char**argv) {
             receive("SET LVSYNC "+std::to_string(i+1)+" 40");
             assert(servoPulseTicks[i]==0);
             receive("SET LVANGLE "+std::to_string(i+1)+" 50");
+            assert(valveAngle[i]==50 && servoPulseTicks[i]==2554);
         }
         idleLoopUntil(300);
         unsigned frame=0;
@@ -87,7 +126,7 @@ int main(int argc,char**argv) {
             for(int i=0;i<4;++i) assert(simulatedPins[36+i]==(phase==i?HIGH:LOW));
         }
         assert(frame==40000);
-        for(int i=0;i<4;++i) assert(valveAngle[i]==45 && servoPulseTicks[i]==2500);
+        for(int i=0;i<4;++i) assert(valveAngle[i]==50 && servoPulseTicks[i]==2554);
         receive("DISARM"); receive("ARM"); idleLoopUntil(900);
         for(int i=0;i<4;++i) assert(servoPulseTicks[i]==0 && valveTarget[i]==-1);
         for(int i=0;i<4;++i) receive("SET LVANGLE "+std::to_string(i+1)+" 50");

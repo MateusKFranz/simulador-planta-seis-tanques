@@ -12,8 +12,7 @@ export function createHardwareControls() {
             <button data-action="plant_reset">Resetar comandos</button>
             <button data-action="estop" class="hw-stop">Emergency Stop</button><button data-action="reset">Reset Fault</button>
         </div>
-        <p class="hw-error" role="status"></p><p class="hw-reset-result" role="status"></p>
-        <p>OY1/OY2: associação A/B provisória. LV1–LV4 habilitadas para teste em 10°–80°; sincronize antes de mover.</p>`;
+        <p class="hw-error" role="status"></p><p class="hw-reset-result" role="status"></p>`;
     document.getElementById('real-connection-section').after(section);
     const controls = Object.fromEntries([...section.querySelectorAll('[data-action]')].map(b => [b.dataset.action, b]));
     let resetAwaiting = false, previousReset = null;

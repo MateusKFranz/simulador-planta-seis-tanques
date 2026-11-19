@@ -14,11 +14,13 @@ export function panTime(state, seconds) {
     return { ...next, end: timeRange(next)[1] };
 }
 export function zoomTime(state, delta, anchor) {
-    const [start, end] = timeRange(state);
+    const [, currentEnd] = timeRange(state);
     const duration = durationLimit(state.duration * Math.exp(delta * .002));
-    const next = { ...state, duration,
-        end: state.follow ? state.last : start + anchor * state.duration + (1 - anchor) * duration };
-    return { ...next, end: timeRange(next)[1] };
+    if (duration === state.duration) return state;
+    const anchored = { ...state, duration, follow: false,
+        end: currentEnd + (1 - anchor) * (duration - state.duration) };
+    const end = timeRange(anchored)[1];
+    return { ...anchored, end, follow: state.follow && end === state.last };
 }
 export function wheelDelta(event, pageSize) {
     return clamp(event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? pageSize : 1), -240, 240);
@@ -27,7 +29,9 @@ export function wheelDelta(event, pageSize) {
 // Única implementação de gestos para o canvas integrado ou destacado.
 export function bindTimeline(canvas, box, geometry, read, write, hover) {
     let drag = null;
-    const inside = (e, g) => e.clientX >= g.left && e.clientX <= g.left + g.width && e.clientY >= g.top && e.clientY <= g.top + g.height;
+    const inside = (e, g) => g.width > 0 && g.height >= 20 &&
+        e.clientX >= g.left && e.clientX <= g.left + g.width &&
+        e.clientY >= g.top && e.clientY <= g.top + g.height;
     canvas.addEventListener('pointerdown', event => {
         const g = geometry();
         if (event.button !== 0 || drag || !read().hasData || !inside(event, g)) return;
@@ -62,13 +66,15 @@ export function bindTimeline(canvas, box, geometry, read, write, hover) {
     canvas.addEventListener('dragstart', event => event.preventDefault());
     canvas.addEventListener('wheel', event => {
         const g = geometry();
-        if (!inside(event, g)) return;
-        event.preventDefault(); event.stopPropagation();
-        if (drag) return;
+        if (drag || !inside(event, g)) return;
         const state = read(), delta = wheelDelta(event, g.width);
         if (!state.hasData || !delta) return;
+        const next = event.ctrlKey ? panTime(state, -delta / g.width * state.duration)
+            : zoomTime(state, delta, (event.clientX - g.left) / g.width);
+        if (next.duration === state.duration && timeRange(next)[1] === timeRange(state)[1]) return;
+        event.preventDefault();
+        event.stopPropagation();
         hover(null);
-        write(event.ctrlKey ? panTime(state, -delta / g.width * state.duration)
-            : zoomTime(state, delta, (event.clientX - g.left) / g.width));
+        write(next);
     }, { passive: false });
 }

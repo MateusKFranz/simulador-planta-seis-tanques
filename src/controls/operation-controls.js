@@ -1,5 +1,5 @@
 import { realPlant, getRealViewRuntime, canSendOperationCommand, sendOperationCommand,
-    applyManualActuator, hardwareCommandPending, canCommandComponent } from '../connection/real.js';
+    applyManualActuator, hardwareCommandPending, canCommandComponent, canRecordManualPosition, manualPositionResult } from '../connection/real.js';
 import { createComponentControlsPanel } from './component-controls-panel.js';
 import { ComponentBatch } from './component-batch.js';
 import { setupFloatingEditor } from '../ui/floating-editor.js';
@@ -69,7 +69,7 @@ export function createOperationControls() {
         row.innerHTML = `<summary>${id}</summary><p class="confirmed"></p><p class="requested"></p><p class="reason"></p><label class="unit-label">Desejado
             <select class="unit"><option value="percent">Abertura (%)</option><option value="angle">Ângulo (°)</option></select></label>
             <input class="value" type="number" min="0" step="1"><select class="branch" aria-label="Estado desejado"><option value="A">A ON / B OFF</option><option value="B">A OFF / B ON</option><option value="RELEASE">RELEASE</option></select><div class="oy-choices"></div>
-            <p class="draft-status"></p><div class="op-buttons"><button class="apply">Aplicar</button><button class="discard">Descartar</button><button class="stop">${id.startsWith('JIC')?'Zerar':'Parar pulso'}</button></div>
+            <p class="component-note" hidden></p><p class="draft-status"></p><div class="op-buttons"><button class="apply">Aplicar</button><button class="discard">Descartar</button><button class="stop">${id.startsWith('JIC')?'Zerar':'Parar pulso'}</button></div>
             <label class="sync-label">Referência física atual (°)<input class="sync" type="number" step="1"><button class="sync-button">Sincronizar sem pulsos</button></label>`;
         const pump=id.startsWith('JIC'), oy=id.startsWith('OY'), hv=id.startsWith('HV'), draft=new Draft();
         const input=row.querySelector('.value'), branch=row.querySelector('.branch'), unit=row.querySelector('.unit');
@@ -154,7 +154,8 @@ export function createOperationControls() {
         const id = typeof e.detail === 'string' ? e.detail : e.detail?.id;
         if (!rows.has(id)) return;
         for (const [key, {row}] of rows) row.hidden = key !== id;
-        const channel = {JIC1:3, JIC3:1, JIC4:2}[id];
+        const runtime = getRealViewRuntime();
+        const channel = runtime.backendMode === 'HARDWARE' ? runtime.hardware?.control?.pumpChannels?.[id] : null;
         faceplate.querySelector('.actuator-title').textContent = id + (channel ? ' / Pump' + channel : '');
         faceplate.hidden = false;
         update();
@@ -212,7 +213,9 @@ export function createOperationControls() {
             submitted.clear();
             for(const {draft} of rows.values()) draft.discard(); source=r.backendMode; }
         section.querySelector('.op-error').textContent = r.lastError ?? '';
-        section.querySelector('.mode-block').textContent = r.operation?.autoBlocked?.join(' · ') ?? '';
+        const blockedCount = r.operation?.autoBlocked?.length ?? 0;
+        section.querySelector('.mode-block').textContent = !r.connected ? 'Aguardando conexão' :
+            blockedCount ? `Automático indisponível · ${blockedCount} pendência${blockedCount === 1 ? '' : 's'}` : 'Automático disponível';
         requirements.querySelector('.op-blocks').textContent = !r.connected ? 'Sem conexão' :
             (r.operation?.autoBlocked?.length ? r.operation.autoBlocked.join(' · ') : 'Nenhum bloqueio informado pelo backend.');
         requirements.querySelector('.op-fixed').textContent='Saídas fixas do cenário: '+Object.values(r.operation?.fixed??{}).flatMap(group=>Object.entries(group).map(([id,value])=>`${id} ${fmt(value*100)}%`)).join(' · ');
@@ -227,12 +230,12 @@ export function createOperationControls() {
             const p=hardware?data?.pumps?.[c?.pumpChannels?.[id]-1]:null;
             const loop=Object.values(r.loops??{}).find(l=>l.mvTarget?.id===id);
             const fixed=Object.values(r.operation?.fixed??{}).some(group=>group && Object.hasOwn(group,id));
-            const auto=mode==='AUTO' && (oy||fixed||loop?.effectiveMode==='AUTO');
+            const auto=!(hardware && hv) && mode==='AUTO' && (oy||fixed||loop?.effectiveMode==='AUTO');
             const hasReadback = pump ? Array.isArray(p) && Number.isFinite(p[0])
                 : oy ? [0,1,2].includes(data?.oy?.[Number(id.at(-1))-1])
                 : Array.isArray(v) && Number.isFinite(v[2]);
             const hvKind = id === 'HV9' ? 'mainValve' : ['HV7','HV8'].includes(id) ? 'recycleValve' : 'manualValve';
-            const ready=enabled && (!hv || canCommandComponent(hvKind,id)) && (!hardware||hasReadback && c?.ready && c?.armed && !c?.busy && !hardwareCommandPending());
+            const ready=hardware && hv ? canRecordManualPosition() : enabled && (!hv || canCommandComponent(hvKind,id)) && (!hardware||hasReadback && c?.ready && c?.armed && !c?.busy && !hardwareCommandPending());
             let confirmed;
             if (hv) {
                 const valve = id === 'HV9' ? realPlant.mainValve : [...realPlant.manualValves,...realPlant.recycleValves].find(v=>v.id===id);
@@ -247,23 +250,30 @@ export function createOperationControls() {
             } else confirmed=hardware?(unit.value==='angle'?v?.[3]:v?.[2]):(realPlant.actuatedValves.find(v=>v.id===id)?.opening??NaN)*100;
             if(confirmed<0 || typeof confirmed==='number' && !Number.isFinite(confirmed)) confirmed=null;
             // Remove apenas o resíduo binário da conversão de fração para percentual.
-            if (!hardware && !pump && !oy && Number.isFinite(confirmed)) confirmed = Number(confirmed.toFixed(8));
+            if ((!hardware || hv) && !pump && !oy && Number.isFinite(confirmed)) confirmed = Number(confirmed.toFixed(8));
             draft.receive(confirmed);
             const pending = submitted.get(id);
-            if (pending && (r.lastUpdate > pending.revision && Object.is(confirmed,pending.value) ||
+            const record = hardware && hv ? manualPositionResult(id) : null;
+            if (pending && (r.lastUpdate > pending.revision && Object.is(confirmed,pending.value) && (!hardware || !hv || record?.success === true) ||
+                record?.success === false && record?.pending === false ||
                 Date.now()-pending.time >= 8000 || !r.connected || r.lastError)) submitted.delete(id);
             if (resetDrafts) { draft.discard(); submitted.delete(id); }
             row.querySelector('.confirmed').textContent=pump?`PWM atual: ${fmt(confirmed)} / 255 · ${fmt(confirmed==null?null:confirmed/255*100)} %`:
-                oy?`Estado atual: ${oyStateLabel(confirmed)}${hardware?' · A/B provisórios':''}`:
-                hardware && !hv?`Abertura atual: ${fmt(v?.[2]<0?null:v?.[2])}% · Ângulo atual: ${fmt(v?.[3]<0?null:v?.[3])}° · ${!v?'BLOQUEADA':!v[5]?'NÃO SINCRONIZADA':v[7]?'MOVENDO':'PARADA'}`:`Abertura atual: ${fmt(confirmed)} %`;
+                oy?`Estado atual: ${oyStateLabel(confirmed)}`:
+                hardware && !hv?`Abertura atual: ${fmt(v?.[2]<0?null:v?.[2])}% · Ângulo atual: ${fmt(v?.[3]<0?null:v?.[3])}° · ${!v?'BLOQUEADA':!v[5]?'NÃO SINCRONIZADA':v[7]?'MOVENDO':'PARADA'}`:hardware && hv ? `Posição informada: ${confirmed == null ? 'Não informada' : fmt(confirmed)+' %'}` : `Abertura atual: ${fmt(confirmed)} %`;
             summaries.get(id).textContent = (auto ? 'AUTO · ' : '') + (pump
                 ? `${fmt(confirmed)} / 255 · ${fmt(confirmed == null ? null : confirmed / 255 * 100)}%`
                 : oy ? oyStateLabel(confirmed) : hardware && !hv
                 ? !v ? 'Sem leitura' : !v[5] ? 'Não sincronizada' : `${fmt(v[2] < 0 ? null : v[2])}% · ${fmt(v[3] < 0 ? null : v[3])}°`
-                : `${fmt(confirmed)}%`);
+                : hardware && hv ? confirmed == null ? 'Não informada' : `Informada: ${fmt(confirmed)}%` : `${fmt(confirmed)}%`);
             if (!pump && !oy && !hv) row.querySelector('.confirmed').title = 'Último ângulo confirmado pelo controlador; não é uma medição física da posição.';
-            const reason=hv && hardware ? 'Válvula manual física: ajuste remoto indisponível.' : auto?'Sob autoridade automática':hardware?(pump?!p?.[1]?'Sentido da bomba não configurado':'':oy?'':!v?'Associação/limites ausentes':!v[5]?'LV não sincronizada':''):'';
-            row.querySelector('.reason').textContent=reason || (!enabled ? 'Controle indisponível nesta conexão' : hardware && !ready ? 'Controle bloqueado: verifique conexão, ARM e pendências no painel de segurança' : '');
+            const reason=hv && hardware ? '' : auto?'Sob autoridade automática':hardware?(pump?!p?.[1]?'Sentido da bomba não configurado':'':oy?'':!v?'Associação/limites ausentes':!v[5]?'LV não sincronizada':''):'';
+            row.querySelector('.reason').textContent=reason || (hardware && hv ? ready ? '' : 'Sem conexão com o backend' : !enabled ? 'Controle indisponível nesta conexão' : hardware && !ready ? 'Controle bloqueado: verifique conexão, ARM e pendências no painel de segurança' : '');
+            const note = row.querySelector('.component-note');
+            note.textContent = hardware ? (oy ? 'Associação A/B provisória.' : hv
+                ? 'A posição começa em 0% no software e pode ser informada pelo operador. Sem medição ou acionamento físico.'
+                : !pump ? 'Faixa 10°–80°; sincronize antes de mover.' : '') : '';
+            note.hidden = !note.textContent;
             const item = rows.get(id);
             item.allowed = ready && !reason; item.reason = row.querySelector('.reason').textContent;
             row.querySelector('.apply').disabled=sidebar.querySelector('.apply').disabled=!ready||!!reason||batch.active||submitted.has(id);
@@ -304,7 +314,7 @@ export function createOperationControls() {
                 b.disabled = !ready || !!reason || batch.active || b.dataset.state === 'RELEASE' && !hardware;
                 b.setAttribute('aria-pressed', String(b.dataset.state === draft.value));
             }
-            row.querySelector('.draft-status').textContent=draft.dirty?'Rascunho local — use Aplicar ou Descartar':'';
+            row.querySelector('.draft-status').textContent=hardware && hv && submitted.has(id) ? 'Aguardando confirmação de registro…' : hardware && hv && record?.pending === false && !record.success ? record.message : draft.dirty?'Rascunho local — use Aplicar ou Descartar':hardware && hv && record?.pending === false ? record.message : '';
         }
         batch.tick({
             context:context(r), ready:enabled && r.backendMode === 'MODELICA', revision:r.lastUpdate,

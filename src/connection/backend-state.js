@@ -9,6 +9,7 @@ const valid = source => source &&
     (source.status == null || ['good', 'valid', 'available'].includes(source.status));
 const number = value => Number.isFinite(value) ? value : null;
 const bit = value => value === true || value === 1 ? 1 : value === false || value === 0 ? 0 : null;
+const manualPosition = source => ['operator', 'assumed'].includes(source?.positionSource);
 
 export function normalizeBackendState(data = {}, { processLayout = true } = {}) {
     const plant = createPlantState();
@@ -61,7 +62,8 @@ export function normalizeBackendState(data = {}, { processLayout = true } = {}) 
                 ? data.threeWayValves?.[valve.equipment]?.branches?.[valve.branch]
                 : data[group]?.[valve.id];
             const known = valid(source) && (data.mode !== 'HARDWARE' ||
-                (['actuatedValves','threeWayBranches'].includes(group) && data.hardware?.serial?.connected === true && data.hardware?.control?.confirmed != null));
+                (['actuatedValves','threeWayBranches'].includes(group) && data.hardware?.serial?.connected === true && data.hardware?.control?.confirmed != null) ||
+                (['manualValves','recycleValves'].includes(group) && manualPosition(source)));
             if (group === 'threeWayBranches') valve.state = known ? bit(source.state) : null;
             else valve.opening = known ? number(source.opening) : null;
         }
@@ -71,7 +73,7 @@ export function normalizeBackendState(data = {}, { processLayout = true } = {}) 
             .filter(branch => branch.equipment === equipment.id)
             .map(branch => [branch.branch, { state: branch.state }]));
     }
-    plant.mainValve.opening = data.mode !== 'HARDWARE' && valid(data.mainValve)
+    plant.mainValve.opening = (data.mode !== 'HARDWARE' || manualPosition(data.mainValve)) && valid(data.mainValve)
         ? number(data.mainValve.opening) : null;
     return plant;
 }

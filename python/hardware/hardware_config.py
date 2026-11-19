@@ -18,8 +18,22 @@ LEVEL_CALIBRATION = {
 ADC_REFERENCE_V = None  # TODO: medir referência do ADC
 TELEMETRY_TIMEOUT_S = 2.0
 # Referência física da Planta 1; índice da API é descoberto pelo PINMAP.
-LT_CHANNELS = {LEVEL_IDS[i]: {"physical": f"LT{i + 1}", "pin": f"A{i}"} for i in range(6)}
-FT_CHANNELS = {FLOW_CHANNEL_IDS[i]: {"physical": f"FT{i + 1}", "pin": f"D{30 + i}"} for i in range(6)}
+LT_CHANNELS = {
+    "LI1": {"physical": "LT4", "pin": "A3"},
+    "LI2": {"physical": "LT5", "pin": "A4"},
+    "LI3": {"physical": "LT3", "pin": "A2"},
+    "LI4": {"physical": "LT6", "pin": "A5"},
+    "LI5": {"physical": "LT1", "pin": "A0"},
+    "LI6": {"physical": "LT2", "pin": "A1"},
+}
+FT_CHANNELS = {
+    "FI1": {"physical": "FT4", "pin": "D33"},
+    "FI2": {"physical": "FT5", "pin": "D34"},
+    "FI3": {"physical": "FT3", "pin": "D32"},
+    "FI4": {"physical": "FT6", "pin": "D35"},
+    "FI5": {"physical": "FT1", "pin": "D30"},
+    "FI6": {"physical": "FT2", "pin": "D31"},
+}
 # Somente valores medidos; não herda dimensões do simulador.
 TANK_GEOMETRY = {f"TQ{i}": {"heightM": None, "capacityL": None} for i in range(1, 7)}
 # TODO: calibrar experimentalmente. LT: (raw_vazio, raw_cheio).
@@ -44,4 +58,3 @@ EXPECTED_OUTPUTS = {
 
 # Liberações explícitas após validação física; calibração visual provisória não autoriza AUTO.
 AUTO_VALIDATED_PVS = {}
-AUTO_VALIDATED_MANUAL_VALVES = {}

@@ -95,10 +95,8 @@ int main(int argc,char**argv) {
   valveConfigs[1]={37,2,20,140,10,150,-1,600,2400};
   denied("SET VALVULA 2 50");
   ok("SET LVSYNC 2 30"); assert(servoAngles[1]==-1 && valveAngle[1]==30);
-  ok("SET VALVULA 2 100"); assert(servoAngles[1]==-1 && valveTarget[1]==140);
-  nowMs+=299; controlTick(); assert(valveAngle[1]==30);
-  ++nowMs; controlTick(); assert(valveAngle[1]==35);
-  ok("SET VALVULA 2 0"); nowMs+=300; controlTick(); assert(valveAngle[1]==30);
+  ok("SET VALVULA 2 100"); assert(servoAngles[1]==140 && valveAngle[1]==140 && valveTarget[1]==140);
+  ok("SET VALVULA 2 0"); assert(servoAngles[1]==20 && valveAngle[1]==20);
   ok("DISARM"); assert(valveTarget[1]==-1 && servoAngles[1]==-1);
   ok("ARM"); nowMs+=300; controlTick(); assert(servoAngles[1]==-1);
   ok("SET OY 1 A"); assert((DDRA&0x30)==0x30 && (PORTA&0x30)==0x10);

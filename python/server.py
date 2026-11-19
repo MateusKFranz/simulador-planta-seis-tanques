@@ -231,7 +231,7 @@ state = {
     "mainValve": {
         "id": "HV9",
 
-        "opening": 1.0
+        "opening": 0.0
     },
 
     "actuatedValves": {
@@ -256,38 +256,38 @@ state = {
     "recycleValves": {
 
         "HV7": {
-            "opening": 1.0
+            "opening": 0.0
         },
 
         "HV8": {
-            "opening": 1.0
+            "opening": 0.0
         },
     },
 
     "manualValves": {
 
         "HV5": {
-            "opening": 1.0
+            "opening": 0.0
         },
 
         "HV6": {
-            "opening": 1.0
+            "opening": 0.0
         },
 
         "HV3": {
-            "opening": 1.0
+            "opening": 0.0
         },
 
         "HV4": {
-            "opening": 1.0
+            "opening": 0.0
         },
 
         "HV1": {
-            "opening": 1.0
+            "opening": 0.0
         },
 
         "HV2": {
-            "opening": 1.0
+            "opening": 0.0
         },
     },
 
@@ -345,6 +345,9 @@ def clamp_level(
     )
 
 
+manual_positions = {}  # Anotações de sessão, sem relação com readback ou ARM.
+
+
 def public_state():
     """Agrupa os ramos A/B sob os dois equipamentos de três vias."""
     snapshot = dict(state)
@@ -371,7 +374,12 @@ def public_state():
         for group, fields in (("pumps", ("power", "command")), ("actuatedValves", ("opening",)),
                               ("manualValves", ("opening",)), ("recycleValves", ("opening",))):
             snapshot[group] = {key: {**item, **dict.fromkeys(fields)} for key, item in state[group].items()}
-        snapshot["mainValve"] = {**state["mainValve"], "opening": None}
+        snapshot["mainValve"] = dict(state["mainValve"])
+        for tag in (f"HV{i}" for i in range(1, 10)):
+            item = snapshot["mainValve"] if tag == "HV9" else snapshot["recycleValves" if tag in {"HV7", "HV8"} else "manualValves"][tag]
+            value = manual_positions.get(tag, 0.0)
+            item.update(opening=value/100, status="available",
+                        positionSource="operator" if tag in manual_positions else "assumed")
         snapshot["threeWayValves"] = {id: {"branches": {branch: {"state": None} for branch in ("A", "B")}}
                                     for id in ("OY1", "OY2")}
         control = snapshot["hardware"].get("control", {})
@@ -854,6 +862,7 @@ def process_serial_events():
 def apply_dequi_readings():
     global last_telemetry_time, last_telemetry_received_at, telemetry_valid
     readings = dequi_hardware.readings()
+    serial_connected = serial_bridge is not None and serial_bridge.connected
     values = {}
     for tag, sample in readings.items():
         channel = sample["source"]["physical"]
@@ -885,12 +894,40 @@ def apply_dequi_readings():
                 calibration = level_zero.parameters(tag) if tag in LEVEL_CALIBRATION else None
                 if calibration:
                     sensor["diagnostics"].update(level_zero.info(tag))
+                    measured_height = TANK_GEOMETRY[f"TQ{LEVEL_IDS.index(tag)+1}"].get("heightM")
+                    sensor["diagnostics"]["heightLimitCm"] = measured_height*100 if measured_height is not None else None
                 mean = sample.get("rawMean50")
                 height_cm = None
-                if (calibration and sample.get("status") == "uncalibrated"
+                extrapolated = above_limit = False
+                fresh = (serial_connected and sample.get("status") in {"available", "uncalibrated"}
+                         and sample.get("valid") is True and sample.get("stale") is False
+                         and not sample.get("outOfRange", False))
+                raw = sample.get("raw")
+                if not serial_connected:
+                    sensor.update(raw=None, voltage=None, status="unavailable", reason="Serial desconectada")
+                elif not fresh:
+                    sensor.update(raw=None, voltage=None)
+                    if sample.get("stale") is True:
+                        sensor["status"] = "stale"
+                    elif sample.get("status") in {"available", "uncalibrated"}:
+                        sensor["status"] = "invalid"
+                elif not (LevelZeroCalibration.finite(raw) and 0 <= raw <= ADC_MAX):
+                    sensor.update(raw=None, status="invalid", reason="RAW inválido")
+                    sensor["diagnostics"]["valid"] = False
+                elif (calibration
                         and sample.get("rawMeanCount", 0) > 0
-                        and isinstance(mean, (int, float)) and math.isfinite(mean)):
-                    height_cm = max(0.0, calibration["slope"] * (mean-calibration["offset_raw"]) + calibration["offset"])
+                        and LevelZeroCalibration.finite(mean) and 0 <= mean <= ADC_MAX):
+                    height_cm, problem = level_zero.convert(tag, mean)
+                    extrapolated = problem == "extrapolated"
+                    if problem == "calibration_warning":
+                        sensor["status"] = problem
+                        sensor["reason"] = "Erro de calibração; reveja os pontos e os resíduos"
+                    if extrapolated:
+                        sensor["reason"] = "Leitura extrapolada"
+                    above_limit = height_cm is not None and height_cm > 30
+                    if above_limit:
+                        height_cm = 30
+                sensor["diagnostics"].update(extrapolated=extrapolated, aboveLevelLimit=above_limit)
                 tank_id = f"TQ{LEVEL_IDS.index(tag)+1}"
                 sensor.update(heightCm=height_cm, level=None, pressure=None)
                 if height_cm is not None:
@@ -903,34 +940,64 @@ def apply_dequi_readings():
 
 
 # COMANDOS RECEBIDOS DA HMI
+def handle_manual_position(message):
+    result = {"type": "manual_position_result", "requestId": message.get("requestId"), "id": message.get("id"), "success": False}
+    try:
+        if not hardware_mode() or set(message) != {"type", "requestId", "id", "percent"}:
+            raise ValueError("Registro de posição manual inválido.")
+        tag, value = message["id"], message["percent"]
+        if not isinstance(tag, str) or tag not in {f"HV{i}" for i in range(1,10)}:
+            raise ValueError("HV desconhecida.")
+        if not LevelZeroCalibration.finite(value) or not 0 <= value <= 100:
+            raise ValueError("Posição informada deve estar entre 0 e 100%.")
+        manual_positions[tag] = value
+        result.update(success=True, percent=value, message="Posição informada registrada pelo backend; sem atuação física.")
+    except (ValueError, TypeError) as error:
+        result["message"] = str(error)
+    return result
+
+
 def handle_level_zero(message):
     result = {"type": "level_zero_result", "requestId": message.get("requestId"), "id": message.get("id"), "success": False}
     try:
         if not hardware_mode():
             raise ValueError("Calibração de zero disponível somente em HARDWARE.")
         sensor, action = message.get("id"), message.get("action")
-        if sensor not in LEVEL_CALIBRATION or action not in {"calibrate", "restore"}:
+        level_zero.validate(sensor, 0)
+        if not isinstance(action, str) or action not in {"calibrate", "restore", "add", "replace", "delete"}:
             raise ValueError("Sensor ou ação de calibração inválidos.")
-        if action == "calibrate":
+        allowed = {"type", "requestId", "id", "action", "rawMean50", "heightCm", "point"}
+        if set(message) - allowed:
+            raise ValueError("Campos de calibração inesperados.")
+        if action in {"calibrate", "add", "replace"}:
             raw = message.get("rawMean50")
+            height = 0.0 if action == "calibrate" else message.get("heightCm")
+            level_zero.validate_points(sensor, [{"raw": raw, "heightCm": height}])
+            measured_height = TANK_GEOMETRY[f"TQ{LEVEL_IDS.index(sensor)+1}"].get("heightM")
+            if measured_height is not None and height > measured_height*100:
+                raise ValueError("Altura acima da geometria física medida.")
             level_zero.validate(sensor, raw)
             sample = dequi_hardware.readings().get(sensor, {})
             mean = sample.get("rawMean50")
             if (not serial_bridge or not serial_bridge.connected
                     or sample.get("status") not in {"available", "uncalibrated"}
                     or sample.get("valid") is not True or sample.get("stale") is not False
-                    or sample.get("outOfRange", False) or sample.get("rawMeanCount", 0) < RAW_MEAN_WINDOW):
+                    or sample.get("outOfRange", False) or sample.get("rawMeanCount", 0) < RAW_MEAN_WINDOW
+                    or sample.get("rawMeanWindow", RAW_MEAN_WINDOW) != RAW_MEAN_WINDOW):
                 raise ValueError("Leitura ausente, inválida ou desatualizada; calibração recusada.")
-            # O RAW enviado pela HMI e um snapshot capturado no clique em
-            # 'Calibrar 0 cm'. A media ao vivo pode mudar naturalmente entre
-            # o clique e a confirmacao; isso nao invalida a amostra capturada.
+            # O RAW capturado no clique permanece fixo até a confirmação,
+            # mesmo que a média ao vivo mude durante esse intervalo.
             level_zero.validate(sensor, mean)
-            level_zero.save(sensor, raw)
+            if action == "calibrate": level_zero.save(sensor, raw)
+            else: level_zero.save(sensor, raw, height=height, action=action, point=message.get("point"))
             raw_label = f"{raw:g}".replace(".", ",")
-            result["message"] = f"Zero de {sensor} calibrado com RAW médio {raw_label}."
+            result["message"] = f"Ponto de {sensor} registrado: {height:g} cm, RAW médio {raw_label}."
+        elif action == "delete":
+            level_zero.save(sensor, action="delete", point=message.get("point"))
+            result["message"] = "Ponto excluído pelo backend."
         else:
             level_zero.save(sensor, restore=True)
-            result["message"] = f"Calibração de zero de {sensor} restaurada."
+            result["message"] = f"Ajustes de {sensor} restaurados ao padrão provisório."
         apply_dequi_readings()
         result.update(success=True, calibration=level_zero.info(sensor))
     except (ValueError, TypeError, OSError) as error:
@@ -1928,6 +1995,9 @@ async def client_handler(
                 continue  # Identificação da HMI, sem comando de atuação.
             if message.get("type") == "level_zero":
                 await send_json(websocket, handle_level_zero(message))
+                continue
+            if message.get("type") == "manual_position":
+                await send_json(websocket, handle_manual_position(message))
                 continue
             if hardware_mode():
                 # RO não chega ao roteador de escrita; CTRL aceita somente o contrato hardware.

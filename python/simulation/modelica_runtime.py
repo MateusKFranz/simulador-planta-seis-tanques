@@ -66,14 +66,8 @@ class RuntimeModelica:
         for p in s["pumps"].values():
             p["power"] = False
             p["command"] = 0.0
-        s["mainValve"]["opening"] = 1.0
-        # Abertura inicial manual do modelo, sem aplicação de cenário.
         for v in s["actuatedValves"].values():
             v["opening"] = 0.0
-        for v in s["recycleValves"].values():
-            v["opening"] = 1.0
-        for v in s["manualValves"].values():
-            v["opening"] = 1.0
         for sensor in s["levelSensors"].values():
             sensor.update(raw=None, status="available")
         for sensor in s["flowSensors"].values():
@@ -86,12 +80,7 @@ class RuntimeModelica:
         # dos padrões da FMU; valem até haver medições da bancada.
         for nome, valor in cenarios.PARAMETROS_PLANTA.items():
             self.planta.parametros[nome] = float(valor)
-        for sid, opening in (("HV9", 1.0),):
-            self.planta.definir_valvula_manual(sid, opening)
-        for sid, v in s["recycleValves"].items():
-            self.planta.definir_valvula_manual(sid, v["opening"])
-        for sid, v in s["manualValves"].items():
-            self.planta.definir_valvula_manual(sid, v["opening"])
+        self._aplicar_valvulas_manuais(dict.fromkeys(VALVULAS_MANUAIS, 0.0), reiniciar=False)
 
     def _aplicar_atuadores_na_planta(self):
         s = self.state
@@ -129,7 +118,7 @@ class RuntimeModelica:
             {"tA": 1., "tB": 0.} if self.manual_oy[xid] == "A" else {"tA": 0., "tB": 1.})
         self.planta.definir_3vias(xid, times["tA"], times["tB"])
 
-    def _aplicar_valvulas_manuais(self, aberturas):
+    def _aplicar_valvulas_manuais(self, aberturas, *, reiniciar=True):
         s = self.state
         mudou = False
         for vid, abertura in aberturas.items():
@@ -146,7 +135,7 @@ class RuntimeModelica:
             if self.planta.parametros.get(nome) != abertura:
                 self.planta.parametros[nome] = abertura
                 mudou = True
-        if mudou and self.planta.inicializada:
+        if reiniciar and mudou and self.planta.inicializada:
             self.planta.reiniciar_mantendo_niveis()
 
     def _aplicar_modos_iniciais(self):
@@ -376,6 +365,7 @@ class RuntimeModelica:
 
     def reset(self):
         self.running = False
+        self._aplicar_valvulas_manuais(dict.fromkeys(VALVULAS_MANUAIS, 0.0), reiniciar=False)
         self.planta.iniciar(self.niveis_iniciais)
         self._aplicar_atuadores_na_planta()
         self.banco.reiniciar()

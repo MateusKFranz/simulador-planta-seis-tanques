@@ -61,7 +61,7 @@ class ZeroTests(unittest.TestCase):
             with self.assertRaises(OSError): store.save('LI2', 100)
         self.assertEqual(self.path.read_bytes(), before)
         store.save('LI2', 100)
-        self.assertEqual(json.loads(self.path.read_text())['zeros'], {**store.zeros})
+        self.assertEqual(json.loads(self.path.read_text()), {'version':2, 'points':store.points})
         self.assertNotIn('LIC3', store.zeros)
         restarted = LevelZeroCalibration(self.path)
         self.assertEqual(restarted.info('LI3')['zeroRaw'], 170.625)
@@ -152,8 +152,8 @@ class ZeroWebSocketTests(unittest.IsolatedAsyncioTestCase):
                     async with websockets.serve(server.client_handler, '127.0.0.1', 0) as ws_server:
                         port = ws_server.sockets[0].getsockname()[1]
                         async with websockets.connect(f'ws://127.0.0.1:{port}') as client:
-                            for action in ('calibrate', 'restore'):
-                                await client.send(json.dumps({'type': 'level_zero', 'action': action, 'id': 'LI1', 'rawMean50': raw, 'requestId': action}))
+                            for action in ('calibrate', 'add', 'restore'):
+                                await client.send(json.dumps({'type': 'level_zero', 'action': action, 'id': 'LI1', 'rawMean50': raw+10 if action=='add' else raw, 'heightCm':5.7, 'requestId': action}))
                                 while True:
                                     response = json.loads(await asyncio.wait_for(client.recv(), 2))
                                     if response['type'] == 'level_zero_result': break

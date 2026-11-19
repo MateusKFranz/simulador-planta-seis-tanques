@@ -133,7 +133,10 @@ atuação. Confirmação com mais de 2 s fica indisponível.
 
 ### Bombas
 
-Pump1/JIC3 = D9/D10; Pump2/JIC4 = D7/D8; Pump3/JIC1 = D5/D6 (RPWM/LPWM).
+Pump1/JIC3 = D9/D10; Pump2/JIC1 = D7/D8; Pump3/JIC4 = D5/D6 (RPWM/LPWM).
+Associação JIC↔BOMBA baseada na observação de bancada; a correspondência das
+três bombas ainda requer confirmação física completa. `pumpChannels` do backend
+é a referência da HMI; o pinout Arduino permanece inalterado.
 A HMI usa PWM 0–255 e mostra também PWM/255 × 100%. No MODELICA, PWM é apenas
 conversão de interface para entrada 0–1. **Zerar** envia zero. Não há mínimo
 40 nem reversão pela HMI. `forward=0` bloqueia partida, 1 usa RPWM e 2 usa LPWM.
@@ -173,9 +176,8 @@ usa os mesmos tA/tB. Nenhuma temporização é executada pelo navegador.
 Usa `python/common/operation.py`, `hardware_operation.py`, `cenarios.py` e a FMU de
 `controle.py`. PVs físicas alimentam o banco e MVs usam a mesma validação/ACK
 Serial dos comandos manuais. Não existe PID no Arduino ou JavaScript.
-`AUTO_VALIDATED_PVS` e `AUTO_VALIDATED_MANUAL_VALVES` estão vazios em
-`hardware_config.py`: são liberações explícitas após validação física, não
-calibrações novas. Também são obrigatórios ARM/readback, sentido de cada bomba
+`AUTO_VALIDATED_PVS` em `hardware_config.py` libera PVs após validação física.
+Também são obrigatórios ARM/readback, sentido de cada bomba
 e configuração/sincronização de cada LV necessária. Os motivos aparecem na HMI.
 Cenários que precisam das quatro LVs exigem configuração e sincronização válidas em todos os canais.
 
@@ -343,8 +345,8 @@ explicitamente pulados. Software validado não significa atuador físico validad
 - [ ] Guardar a variante RO; selecionar COM e conferir a identificação da placa.
 - [ ] Com potência isolada, conferir boot CTRL, D36 INPUT sem pull-up, bombas RPWM/LPWM zero e FT.
 - [ ] Pump1/JIC3: verificar operação em RPWM D9, LPWM D10 em zero; registrar faixa útil observada.
-- [ ] Pump2/JIC4: verificar operação em RPWM D7, LPWM D8 em zero; registrar faixa útil observada.
-- [ ] Pump3/JIC1: verificar operação em RPWM D5, LPWM D6 em zero; registrar faixa útil observada.
+- [ ] Pump2/JIC1: verificar operação em RPWM D7, LPWM D8 em zero; registrar faixa útil observada.
+- [ ] Pump3/JIC4: verificar operação em RPWM D5, LPWM D6 em zero; registrar faixa útil observada.
 - [ ] Manter Servo1/D36 fora dos testes: problema físico/possível curto.
 - [ ] Servo2/D37: confirmar LV e os mesmos limites.
 - [ ] Servo3/D38: confirmar LV e os mesmos limites.
@@ -358,24 +360,51 @@ explicitamente pulados. Software validado não significa atuador físico validad
 - [ ] Validar Emergency Stop, perda de comunicação, watchdog e ausência de restauração.
 - [ ] Validar na bancada a associação provisória dos pares OY e registrar observações.
 
-### Zero de nível em campo
+### Calibração de nível em campo
 
-Na leitura do arquivo de zeros, as chaves antigas `LIC3/LIC4` são aceitas como `LI3/LI4`. Ao salvar, são usadas apenas as chaves novas. Valores divergentes entre as duas chaves interrompem a carga com erro, sem alterar o arquivo.
+No drawer ou na janela destacada de LI1–LI6, informe a altura física medida
+em cm (por exemplo `5,7` ou `5.7`) e use **Adicionar ponto**. Aguarde a média
+de 10 leituras válidas estabilizar. A confirmação mostra LI, altura informada
+e RAW médio capturado no clique, que permanece fixo até confirmar. O nome
+`rawMean50` é legado; a janela atual é `rawMeanWindow=10`. Não há comando Serial.
 
-Os padrões ficam em `python/hardware/hardware_config.py`. A calibração ativa combina esses
-padrões com os zeros individuais de `data/level-zero.json`, carregados no startup.
-Cada gravação substitui somente o zero do sensor selecionado, de forma atômica;
-restaurar remove esse ajuste e volta ao padrão. O ganho padrão permanece inalterado.
-O arquivo atual e seus valores são preservados. Não há calibração multiponto.
+Cada LI aceita até cinco pares altura/RAW, sem alturas obrigatórias. **Calibrar
+0 cm** registra um ponto na mesma coleção; um zero existente pede substituição.
+A tabela permite substituir/excluir com confirmação. Restaurar remove somente
+os pontos do sensor selecionado. Pontos continuam visíveis offline; captura
+exige COM conectada, média completa e leitura válida/fresca. Sucesso depende
+da confirmação de gravação pelo backend.
 
-O drawer mostra `Amostras: N/10`. Calibrar exige 10 leituras válidas, RAW entre
-0 e 1023 e confirmação do operador. Após mudar fisicamente o nível, espere a
-janela estabilizar: não existe detecção automática dessa mudança. O RAW capturado
-no clique permanece fixo durante a confirmação. `rawMean50` é o nome de protocolo
-mantido por compatibilidade; a janela real é informada por `rawMeanWindow=10`.
+Sem pontos, usa-se a conversão provisória configurada. Com um ponto, apenas o
+offset é ajustado, mantendo ganho provisório. Dois pontos definem uma reta;
+três a cinco usam mínimos quadrados sobre todos os pontos. Inclinação negativa
+é permitida; duplicatas, RAW indistinguível e ganho degenerado são recusados.
+O painel mostra inclinação, intercepto, resíduos e erro RMS. Pontos não
+monotônicos ou RMS maior que `max(0,5 cm; 5% da faixa de alturas)` recebem
+aviso e não produzem altura. Esse limite é uma triagem, não validação metrológica.
+Nenhuma quantidade de pontos certifica automaticamente a calibração.
 
-`SIX_TANK_LEVEL_ZERO_FILE` permite selecionar outro arquivo de campo. Os testes
-usam exclusivamente um arquivo temporário, sem acessar a calibração da planta.
+Não há extrapolação fora da faixa RAW dos pontos: a altura fica ausente,
+com diagnóstico explícito e RAW preservado. Snapshot, P&ID, tendências e CSV
+consomem a mesma conversão do backend; dados inválidos/stale não viram zero.
+A geometria física medida, quando disponível, limita as alturas aceitas.
+
+Os pontos persistem em `data/level-zero.json` (schema 2), ou no caminho
+`SIX_TANK_LEVEL_ZERO_FILE`. Arquivos schema 1 são lidos sem alteração: cada
+zero vira um ponto RAW/0 cm. A próxima gravação usa substituição atômica;
+erro preserva arquivo e memória. Aliases `LIC3/LIC4` tornam-se `LI3/LI4`;
+conflitos divergentes impedem a carga. Pontos históricos deste documento não
+são importados. Testes usam arquivos temporários.
+
+### Posições manuais HV
+
+Em HARDWARE, HV1–HV9 aceitam **Posição informada** de 0–100% pelo operador,
+com rascunho compartilhado entre sidebar e editor, Aplicar e Descartar.
+Sem registro, a posição inicial assumida pelo software é **0%**. O backend confirma a anotação e
+a publica aos clientes; não é medição, readback ou movimento físico.
+Funciona em RO e CTRL desarmado, sem ARM, Serial ou autorização de AUTO.
+Os registros duram a sessão do backend, inclusive reconexões da HMI, e não
+são gravados no arquivo de calibração. Aplicar todos continua bloqueado em HARDWARE.
 
 ### Resetar comandos
 

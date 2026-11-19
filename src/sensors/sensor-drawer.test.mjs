@@ -73,7 +73,7 @@ test('atualização reutiliza as linhas e os valores confirmados MODELICA/HARDWA
     f.runtime.hardware = { serial: { connected: true } };
     f.plant.levelSensors[1].diagnostics = { rawMean50: 201.3 };
     f.drawer.update(f.plant, f.runtime);
-    assert.match(f.detail.text(), /Fonte: HARDWARE/);
+    assert.doesNotMatch(f.detail.text(), /Fonte: HARDWARE/);
     assert.match(f.detail.text(), /RAW médio: 201,3/);
     f.plant.levelSensors[1].status = 'stale';
     f.drawer.update(f.plant, f.runtime);

@@ -2,8 +2,8 @@
     grid-column: 1 / -1;
     grid-row: 1 / -1;
     position: relative;
-    display: grid;
-    grid-template-rows: auto minmax(0, 1fr);
+    display: flex;
+    flex-direction: column;
     min-height: 0;
     background: var(--panel);
 }
@@ -12,6 +12,7 @@
 
 .tv-bar {
     display: flex;
+    flex: 0 0 auto;
     align-items: center;
     gap: 10px;
     padding: 8px 14px;
@@ -40,6 +41,26 @@
     letter-spacing: 0.04em;
 }
 
+.tv-categories {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 16px;
+    flex-basis: 100%;
+}
+
+.tv-categories label {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.tv-categories input { accent-color: var(--tv-category-accent); }
+.tv-category-name { color: var(--tv-category-accent); font-weight: 650; }
+
+.tv-categories small,
+.tv-selection-empty { color: var(--muted); }
+.tv-selection-empty { margin: 0; padding: 10px 14px; }
+
 .trends-view button,
 .trends-view select,
 .trends-view input[type="text"] {
@@ -56,13 +77,24 @@
 .trends-view button:disabled { opacity: 0.45; cursor: default; }
 .trends-view input[type="text"] { width: 150px; font-weight: 400; }
 .trends-view .tv-live.active { border-color: var(--ok); color: var(--ok); opacity: 1; }
-.trends-view .tv-rec.recording { background: var(--alarm-1); border-color: var(--alarm-1); color: var(--paper); }
+.trends-view .tv-rec.recording { background: var(--sig); border-color: var(--sig); color: var(--paper); }
 .tv-count { color: var(--muted); font-size: 11.5px; font-variant-numeric: tabular-nums; }
 
 .tv-rows {
-    display: grid;
-    grid-template-rows: 1fr 1fr 1.12fr;
+    flex: 1 1 auto;
+    height: calc(var(--tv-plot-height, 0px) + 10px);
+    min-width: 0;
     min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    background: var(--tv-background);
+}
+
+.tv-rows-grid {
+    display: grid;
+    box-sizing: border-box;
+    height: 100%;
     padding: 4px 0 6px;
 }
 
@@ -70,12 +102,15 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr) 290px;
     min-height: 0;
-    border-bottom: 1px solid #e3e5e8;
+    background: var(--panel);
+    box-shadow: inset 3px 0 var(--tv-category-accent);
+    border-bottom: 1px solid var(--tv-frame);
 }
 
 .tv-row:last-child { border-bottom: 0; }
 
 .tv-plot {
+    position: relative;
     display: flex;
     gap: 6px;
     min-width: 0;
@@ -101,31 +136,15 @@
     height: 100%;
 }
 
-.tv-plot-empty {
-    flex: 1;
-    display: grid;
-    align-content: center;
-    justify-items: center;
-    gap: 4px;
-    margin: 22px 12px 26px 50px;
-    border: 1px dashed #b6bcc0;
-    border-radius: 4px;
-    color: var(--muted);
-    text-align: center;
-}
-
-.tv-plot-empty strong { color: var(--ink); font-size: 12px; }
-
 .tv-legend {
-    min-height: 0;
-    overflow: hidden;
+    align-self: start;
     padding: 6px 14px 4px 12px;
-    border-left: 1px solid #dde0e4;
+    border-left: 1px solid var(--tv-category-accent);
     font-size: 12px;
 }
 
 .tv-legend-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; }
-.tv-legend-head strong { font-size: 12px; white-space: nowrap; }
+.tv-legend-head strong { color: var(--tv-category-accent); font-size: 12px; white-space: nowrap; }
 .tv-legend-head span { color: var(--muted); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .tv-legend-row {
@@ -144,11 +163,11 @@
 .tv-legend-cols { cursor: default; color: var(--muted); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em; }
 .tv-legend-cols span:nth-child(n+4) { text-align: right; }
 .tv-legend-row input { margin: 0; accent-color: var(--ink); }
-.tv-swatch { width: 26px; height: 10px; }
+.tv-swatch { width: 26px; height: 10px; background: var(--paper); border-radius: 2px; }
 .tv-tag { font: 700 11.5px ui-monospace, Consolas, monospace; white-space: nowrap; }
 .tv-desc { color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tv-value { font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
-.tv-rows.at-cursor .tv-value { color: var(--sig); }
+.tv-rows-grid.at-cursor .tv-value { color: var(--sig); }
 .tv-legend-row.off { opacity: 0.45; }
 .tv-legend-row.off .tv-value { visibility: hidden; }
 .tv-loop-row:hover { background: #e9ebee; }
@@ -164,7 +183,8 @@
     font: 700 10px system-ui, sans-serif;
 }
 
-.tv-mode.man { border-color: var(--man); color: var(--man); background: var(--man-bg); }
+.tv-mode.man { border-color: var(--man); color: var(--man); background: var(--paper); }
+.tv-mode.unknown { border-color: var(--unknown); color: var(--ink); background: var(--paper); }
 
 .tv-legend-note {
     display: flex;
@@ -175,7 +195,6 @@
     font-size: 11px;
 }
 
-.tv-man-swatch { width: 14px; height: 8px; background: var(--man); }
 
 .tv-empty {
     position: absolute;
@@ -198,17 +217,6 @@
 .tv-spval { color: var(--muted); font-variant-numeric: tabular-nums; }
 /* Painel inferior: o auto-fit existente acompanha o espaço restante. */
 .trends-view {
-    --paper: #fff;
-    --ink: #1c1d21;
-    --muted: #5f6168;
-    --rule: #d9d9d9;
-    --sig: #2563a8;
-    --panel: #f3f4f6;
-    --man: #b45309;
-    --man-bg: #fdf1e2;
-    --alarm-1: #c81e1e;
-    --bad: #9333ea;
-    --ok: #2f7d4f;
     position: relative;
     flex: 0 0 auto;
     width: 100%;
@@ -224,7 +232,25 @@
 .trends-view .tv-bar { padding-top: 12px; }
 .trends-view .tv-select { width: 165px; }
 .trends-view .tv-live { min-width: 165px; }
-.tv-rows { grid-template-rows: minmax(135px, 1fr) minmax(135px, 1fr) minmax(150px, 1.12fr); overflow: auto; }
-.tv-legend { overflow: auto; }
-.trends-view.tv-detached { height: 100vh !important; width: 100vw; border-radius: 0; }
+.tv-plot-grip {
+    position: absolute;
+    right: 5px;
+    bottom: 2px;
+    width: 18px;
+    height: 18px;
+    cursor: ns-resize;
+    touch-action: none;
+    user-select: none;
+    color: #66798a;
+}
+.tv-plot-grip::after {
+    content: '';
+    position: absolute;
+    inset: 4px 2px 2px 4px;
+    background: repeating-linear-gradient(135deg, transparent 0 2px, currentColor 2px 3px);
+    clip-path: polygon(100% 0, 100% 100%, 0 100%);
+    pointer-events: none;
+}
+.tv-plot-grip:hover, .tv-plot-grip.resizing, .tv-plot-grip:focus-visible { color: #315b7b; background: #cfdae5; }
+.trends-view.tv-detached { height: 100vh !important; max-height: 100vh !important; width: 100vw; border-radius: 0; }
 .trends-recover { position: absolute; bottom: 12px; right: 150px; z-index: 75; padding: 10px; }

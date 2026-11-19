@@ -4,7 +4,10 @@ import './trends.css';
 
 export function createTrendsPanel() {
     const host = document.querySelector('.main-area');
-    const trends = createTrends(host);
+    const trends = createTrends(host, {
+        onSelectionChange: () => resize.keepHeight(),
+        onPlotResize: delta => resize.plotResized(delta)
+    });
     const panel = trends.element, bar = panel.querySelector('.tv-bar');
     const button = (text, label = text) => {
         const b = document.createElement('button'); b.type = 'button'; b.textContent = text;
@@ -36,7 +39,7 @@ export function createTrendsPanel() {
     open.onclick = () => {
         if (detached.alive()) { detached.focus(); return; }
         document.dispatchEvent(new CustomEvent('workspace-panel-open', { detail: 'trends' }));
-        resize.apply(); show(); close.focus();
+        show(); resize.apply(); close.focus();
     };
     popout.onclick = () => { notice.textContent = detached.detach() ? '' : 'Permita popups para destacar Tendências.'; };
     dock.onclick = recover.onclick = () => {
