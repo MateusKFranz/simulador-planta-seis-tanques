@@ -106,7 +106,7 @@ export function createPlantState() {
                 'HV9',
 
             opening:
-                0
+                1
         },
 
         // VÁLVULAS ATUADAS
@@ -157,7 +157,7 @@ export function createPlantState() {
                     'TQ3',
 
                 opening:
-                    0
+                    1
             },
 
             {
@@ -168,7 +168,7 @@ export function createPlantState() {
                     'TQ4',
 
                 opening:
-                    0
+                    1
             }
         ],
 
@@ -186,7 +186,7 @@ export function createPlantState() {
                     'COMMON_INLET_TQ3',
 
                 opening:
-                    0
+                    1
             },
 
             {
@@ -197,7 +197,7 @@ export function createPlantState() {
                     'COMMON_INLET_TQ4',
 
                 opening:
-                    0
+                    1
             },
 
             {
@@ -208,7 +208,7 @@ export function createPlantState() {
                     'TQ3_TO_JIC3',
 
                 opening:
-                    0
+                    1
             },
 
             {
@@ -219,7 +219,7 @@ export function createPlantState() {
                     'TQ4_TO_JIC4',
 
                 opening:
-                    0
+                    1
             },
 
             {
@@ -230,7 +230,7 @@ export function createPlantState() {
                     'TQ1_TO_RESERVOIR',
 
                 opening:
-                    0
+                    1
             },
 
             {
@@ -241,7 +241,7 @@ export function createPlantState() {
                     'TQ2_TO_RESERVOIR',
 
                 opening:
-                    0
+                    1
             }
         ],
 

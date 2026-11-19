@@ -271,7 +271,7 @@ export function createOperationControls() {
             row.querySelector('.reason').textContent=reason || (hardware && hv ? ready ? '' : 'Sem conexão com o backend' : !enabled ? 'Controle indisponível nesta conexão' : hardware && !ready ? 'Controle bloqueado: verifique conexão, ARM e pendências no painel de segurança' : '');
             const note = row.querySelector('.component-note');
             note.textContent = hardware ? (oy ? 'Associação A/B provisória.' : hv
-                ? 'A posição começa em 0% no software e pode ser informada pelo operador. Sem medição ou acionamento físico.'
+                ? 'A posição começa em 100% no software e pode ser informada pelo operador. Sem medição ou acionamento físico.'
                 : !pump ? 'Faixa 10°–80°; sincronize antes de mover.' : '') : '';
             note.hidden = !note.textContent;
             const item = rows.get(id);

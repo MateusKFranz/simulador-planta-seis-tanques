@@ -400,7 +400,7 @@ são importados. Testes usam arquivos temporários.
 
 Em HARDWARE, HV1–HV9 aceitam **Posição informada** de 0–100% pelo operador,
 com rascunho compartilhado entre sidebar e editor, Aplicar e Descartar.
-Sem registro, a posição inicial assumida pelo software é **0%**. O backend confirma a anotação e
+Sem registro, a posição inicial assumida pelo software é **100%**. O backend confirma a anotação e
 a publica aos clientes; não é medição, readback ou movimento físico.
 Funciona em RO e CTRL desarmado, sem ARM, Serial ou autorização de AUTO.
 Os registros duram a sessão do backend, inclusive reconexões da HMI, e não

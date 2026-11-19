@@ -231,7 +231,7 @@ state = {
     "mainValve": {
         "id": "HV9",
 
-        "opening": 0.0
+        "opening": 1.0
     },
 
     "actuatedValves": {
@@ -256,38 +256,38 @@ state = {
     "recycleValves": {
 
         "HV7": {
-            "opening": 0.0
+            "opening": 1.0
         },
 
         "HV8": {
-            "opening": 0.0
+            "opening": 1.0
         },
     },
 
     "manualValves": {
 
         "HV5": {
-            "opening": 0.0
+            "opening": 1.0
         },
 
         "HV6": {
-            "opening": 0.0
+            "opening": 1.0
         },
 
         "HV3": {
-            "opening": 0.0
+            "opening": 1.0
         },
 
         "HV4": {
-            "opening": 0.0
+            "opening": 1.0
         },
 
         "HV1": {
-            "opening": 0.0
+            "opening": 1.0
         },
 
         "HV2": {
-            "opening": 0.0
+            "opening": 1.0
         },
     },
 
@@ -377,7 +377,7 @@ def public_state():
         snapshot["mainValve"] = dict(state["mainValve"])
         for tag in (f"HV{i}" for i in range(1, 10)):
             item = snapshot["mainValve"] if tag == "HV9" else snapshot["recycleValves" if tag in {"HV7", "HV8"} else "manualValves"][tag]
-            value = manual_positions.get(tag, 0.0)
+            value = manual_positions.get(tag, 100.0)
             item.update(opening=value/100, status="available",
                         positionSource="operator" if tag in manual_positions else "assumed")
         snapshot["threeWayValves"] = {id: {"branches": {branch: {"state": None} for branch in ("A", "B")}}

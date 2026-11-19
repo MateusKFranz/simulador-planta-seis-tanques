@@ -80,7 +80,7 @@ class RuntimeModelica:
         # dos padrões da FMU; valem até haver medições da bancada.
         for nome, valor in cenarios.PARAMETROS_PLANTA.items():
             self.planta.parametros[nome] = float(valor)
-        self._aplicar_valvulas_manuais(dict.fromkeys(VALVULAS_MANUAIS, 0.0), reiniciar=False)
+        self._aplicar_valvulas_manuais(dict.fromkeys(VALVULAS_MANUAIS, 1.0), reiniciar=False)
 
     def _aplicar_atuadores_na_planta(self):
         s = self.state
@@ -365,7 +365,7 @@ class RuntimeModelica:
 
     def reset(self):
         self.running = False
-        self._aplicar_valvulas_manuais(dict.fromkeys(VALVULAS_MANUAIS, 0.0), reiniciar=False)
+        self._aplicar_valvulas_manuais(dict.fromkeys(VALVULAS_MANUAIS, 1.0), reiniciar=False)
         self.planta.iniciar(self.niveis_iniciais)
         self._aplicar_atuadores_na_planta()
         self.banco.reiniciar()
